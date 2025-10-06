@@ -3,6 +3,7 @@
 Integration test for make_shorts.py - tests end-to-end functionality
 """
 
+import pytest
 import subprocess
 import tempfile
 import os
@@ -12,8 +13,8 @@ def test_integration():
     """Test that the script creates a valid output with expected properties."""
     
     # Path to the example video and script
-    script_path = Path(__file__).parent / "make_shorts.py"
-    video_path = Path(__file__).parent / "examples" / "video.mp4"
+    script_path = Path(__file__).parent.parent / "make_shorts.py"
+    video_path = Path(__file__).parent.parent / "examples" / "video.mp4"
     
     print(f"Testing with script: {script_path}")
     print(f"Testing with video: {video_path}")
@@ -23,9 +24,10 @@ def test_integration():
         output_path = tmp_file.name
     
     try:
-        # Run the script
+        # Run the script - use sys.executable to get the right Python
+        import sys
         cmd = [
-            "python", str(script_path),
+            sys.executable, str(script_path),
             str(video_path),
             "0", "5",  # Extract first 5 seconds
             "--output", output_path,
@@ -35,21 +37,14 @@ def test_integration():
         result = subprocess.run(cmd, capture_output=True, text=True)
         
         if result.returncode != 0:
-            print(f"Script failed with code {result.returncode}")
-            print(f"Stdout: {result.stdout}")
-            print(f"Stderr: {result.stderr}")
-            return False
+            pytest.fail(f"Script failed with code {result.returncode}\nStdout: {result.stdout}\nStderr: {result.stderr}")
         
         # Check that output file exists
-        if not Path(output_path).exists():
-            print("Output file was not created")
-            return False
+        assert Path(output_path).exists(), "Output file was not created"
         
         # Check file size (should be > 0)
         file_size = Path(output_path).stat().st_size
-        if file_size == 0:
-            print("Output file is empty")
-            return False
+        assert file_size > 0, "Output file is empty"
         
         print(f"✅ Output file created successfully: {file_size} bytes")
         
@@ -61,9 +56,7 @@ def test_integration():
         
         probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
         
-        if probe_result.returncode != 0:
-            print("Failed to probe output video")
-            return False
+        assert probe_result.returncode == 0, "Failed to probe output video"
         
         import json
         probe_data = json.loads(probe_result.stdout)
@@ -75,9 +68,7 @@ def test_integration():
                 video_stream = stream
                 break
         
-        if not video_stream:
-            print("No video stream found in output")
-            return False
+        assert video_stream is not None, "No video stream found in output"
         
         # Verify resolution
         width = video_stream.get("width")
@@ -86,22 +77,17 @@ def test_integration():
         
         print(f"✅ Video properties: {width}x{height}, duration: {duration:.2f}s")
         
-        if width != 720 or height != 1280:
-            print(f"❌ Wrong resolution: expected 720x1280, got {width}x{height}")
-            return False
-        
-        if not (4.8 <= duration <= 5.2):  # Allow some tolerance
-            print(f"❌ Wrong duration: expected ~5s, got {duration:.2f}s")
-            return False
+        assert width == 720, f"Wrong width: expected 720, got {width}"
+        assert height == 1280, f"Wrong height: expected 1280, got {height}"
+        assert 4.8 <= duration <= 5.2, f"Wrong duration: expected ~5s, got {duration:.2f}s"
         
         print("✅ All integration tests passed!")
-        return True
         
     finally:
         # Cleanup
         if Path(output_path).exists():
             os.unlink(output_path)
 
+
 if __name__ == "__main__":
-    success = test_integration()
-    exit(0 if success else 1)
+    pytest.main([__file__, '-v'])

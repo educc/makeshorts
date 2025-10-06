@@ -1,0 +1,1 @@
+# Test package for make_shorts functionality
