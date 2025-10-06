@@ -1,0 +1,240 @@
+1
+00:00:00,000 --> 00:00:08,100
+ Today on Forbes, you're not imagining it, AI is already taking tech jobs.
+
+2
+00:00:08,100 --> 00:00:13,100
+ Between meetings in April, Misha Kaufman, CEO of the freelance marketplace Fiverr, fired
+
+3
+00:00:13,100 --> 00:00:18,800
+ off a memo to his 1,200 employees that didn't mince words, writing, quote, "AI is coming
+
+4
+00:00:18,800 --> 00:00:19,800
+ for your jobs.
+
+5
+00:00:19,800 --> 00:00:22,080
+ Heck, it's coming for my job, too.
+
+6
+00:00:22,080 --> 00:00:23,080
+ This is a wake-up call."
+
+7
+00:00:23,080 --> 00:00:29,360
+ The memo detailed Kaufman's thesis for AI, that it would elevate everyone's abilities,
+
+8
+00:00:29,360 --> 00:00:34,720
+ easy tasks would become no-brainers, hard tasks would become easy, impossible tasks
+
+9
+00:00:34,720 --> 00:00:37,080
+ would become merely hard, he posited.
+
+10
+00:00:37,080 --> 00:00:41,720
+ And because AI tools are free to use, no one has an advantage.
+
+11
+00:00:41,720 --> 00:00:46,360
+ In the shuffle, people who didn't adapt would be, quote, "doomed."
+
+12
+00:00:46,360 --> 00:00:50,640
+ Kaufman tells Forbes now, quote, "I hear the conversation around the office.
+
+13
+00:00:50,640 --> 00:00:55,040
+ I hear developers ask each other, 'Guys, are we going to have a job in two years?'
+
+14
+00:00:55,040 --> 00:00:59,680
+ I felt like this needed validation from me, that they aren't imagining stuff."
+
+15
+00:00:59,680 --> 00:01:05,840
+ Already, younger and more inexperienced programmers are seeing a drop in employment rate.
+
+16
+00:01:05,840 --> 00:01:11,840
+ Ruoyu Chen, a postdoctoral fellow at the Digital Economy Lab of Stanford's Institute for Human-Centered
+
+17
+00:01:11,840 --> 00:01:17,920
+ AI, said that the total number of employed entry-level developers from ages 18 to 25
+
+18
+00:01:17,920 --> 00:01:23,840
+ has dropped, quote, "slightly" since 2022, after the launch of ChatGPT.
+
+19
+00:01:23,840 --> 00:01:27,760
+ It isn't just lack of experience that could make getting a job extremely difficult going
+
+20
+00:01:27,760 --> 00:01:28,760
+ forward.
+
+21
+00:01:28,760 --> 00:01:32,960
+ Chen notes, too, that the market may be tougher for those who are just average at their jobs.
+
+22
+00:01:32,960 --> 00:01:38,320
+ In the age of AI, only exceptional employees have an edge.
+
+23
+00:01:38,320 --> 00:01:42,640
+ Chen and her colleagues studied large-scale payroll data in the U.S., shared by the HR
+
+24
+00:01:42,640 --> 00:01:48,120
+ company ADP, to examine generative AI's impact on the workforce.
+
+25
+00:01:48,120 --> 00:01:52,600
+ The employment rate decline for entry-level developers is small, but a significant development
+
+26
+00:01:52,600 --> 00:01:57,280
+ in the field of engineering in the tech industry, an occupation that has seemed synonymous with
+
+27
+00:01:57,280 --> 00:02:01,100
+ wealth and exorbitant salaries for more than a quarter century.
+
+28
+00:02:01,100 --> 00:02:07,000
+ Now, suddenly, after years of rhetoric about how AI will augment workers rather than replace
+
+29
+00:02:07,000 --> 00:02:12,160
+ them, many tech CEOs have become more direct about the toll of AI.
+
+30
+00:02:12,160 --> 00:02:17,720
+ Anthropic CEO Dario Amadei has said AI could wipe out half of all entry-level white-collar
+
+31
+00:02:17,720 --> 00:02:22,760
+ jobs and spike unemployment up to 20% within the next five years.
+
+32
+00:02:22,760 --> 00:02:29,640
+ Amazon CEO Andy Jassy said last month that AI will "reduce our total corporate workforce"
+
+33
+00:02:29,640 --> 00:02:34,400
+ over the next few years as the company begins to "need fewer people doing some of the jobs
+
+34
+00:02:34,400 --> 00:02:39,400
+ that are being done today and more people doing other types of jobs."
+
+35
+00:02:39,400 --> 00:02:45,400
+ Earlier this year, Shopify CEO Toby Lutka also posted a memo that he sent his team, saying
+
+36
+00:02:45,400 --> 00:02:51,600
+ that budget for new hires would only be granted for jobs that can't be automated by AI.
+
+37
+00:02:51,600 --> 00:02:57,160
+ Tech companies have also started cutting jobs or freezing hiring explicitly due to AI and
+
+38
+00:02:57,160 --> 00:02:58,160
+ automation.
+
+39
+00:02:58,160 --> 00:03:03,380
+ At stalwart IBM, hundreds of human resources employees were replaced by AI in May, part
+
+40
+00:03:03,380 --> 00:03:07,760
+ of broader job cuts that terminated 8,000 employees.
+
+41
+00:03:07,760 --> 00:03:13,320
+ Also in May, Luis Van Ahn, CEO of the language learning app Duolingo, said the company would
+
+42
+00:03:13,320 --> 00:03:17,840
+ stop using contractors for work that could be done by AI.
+
+43
+00:03:17,840 --> 00:03:23,440
+ Sebastian Simietkowski, CEO of buy-now-pay-later firm Klarna, said in May that the company
+
+44
+00:03:23,440 --> 00:03:29,280
+ had slashed its workforce 40% in part due to investments in AI.
+
+45
+00:03:29,280 --> 00:03:34,120
+ Microsoft made its own waves earlier this month when it laid off 9,000 employees, or
+
+46
+00:03:34,120 --> 00:03:36,560
+ about 4% of its workforce.
+
+47
+00:03:36,560 --> 00:03:41,280
+ The company didn't explicitly cite AI as a reason for the downsizing, but it has broadly
+
+48
+00:03:41,280 --> 00:03:46,920
+ increased its spending in AI and touted the savings it had racked up from using the tech.
+
+49
+00:03:46,920 --> 00:03:52,000
+ CEO Satya Nadella said in April that as much as 30% of code at the company is being written
+
+50
+00:03:52,000 --> 00:03:53,880
+ by AI.
+
+51
+00:03:53,880 --> 00:03:59,280
+ One laid-off Microsoft employee told Forbes, "This is what happens when a company is rearranging
+
+52
+00:03:59,280 --> 00:04:01,800
+ priorities."
+
+53
+00:04:01,800 --> 00:04:06,560
+ It's difficult to pinpoint the exact motivation behind job cuts at any given company.
+
+54
+00:04:06,560 --> 00:04:11,080
+ The overall economic environment could also be a factor, marked by uncertainties heightened
+
+55
+00:04:11,080 --> 00:04:14,760
+ by President Donald Trump's erratic tariff plans.
+
+56
+00:04:14,760 --> 00:04:19,200
+ Many companies also became bloated during the pandemic, and recent layoffs could still
+
+57
+00:04:19,200 --> 00:04:23,000
+ be trying to correct for over-hiring.
+
+58
+00:04:23,000 --> 00:04:28,280
+ For full coverage, check out Richard Nieva's piece on Forbes.com
+
+59
+00:04:28,280 --> 00:04:32,320
+ This is Kieran Meadows from Forbes, thanks for tuning in.
+
+60
+00:04:41,080 --> 00:04:43,140
+ you
+
