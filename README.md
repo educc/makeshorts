@@ -147,6 +147,11 @@ Show verbose output during processing:
 python make_shorts.py input.mp4 10 30 --verbose
 ```
 
+Extract only audio and output as MP3:
+```bash
+python make_shorts.py input.mp4 10 30 --only-audio --output audio.mp3
+```
+
 Clamp times to video duration instead of failing:
 ```bash
 python make_shorts.py input.mp4 10 30 500 600 --clamp
@@ -189,6 +194,7 @@ python make_shorts.py input.mp4 10 30 300 320 --max-duration 30
 - `--verbose` - Stream ffmpeg output to console
 - `--max-duration` - Cap final output length in seconds
 - `--clamp` - Clamp start/end times to input duration instead of failing
+- `--only-audio` - Extract only audio and output as MP3
 
 ## Examples
 
@@ -215,13 +221,20 @@ python make_shorts.py movie.mp4 600 630 1800 1830 3600 3630 \
   --dry-run
 ```
 
+### Extract audio highlights as MP3:
+```bash
+python make_shorts.py podcast.mp4 00:05:30 00:06:00 00:15:45 00:16:15 \
+  --only-audio \
+  --output "podcast_highlights.mp3"
+```
+
 ## Output Format
 
-- **Aspect Ratio:** 9:16 (portrait)
-- **Default Resolution:** 1080x1920
-- **Container:** MP4 with web-optimized flags
-- **Video Codec:** H.264 (libx264)
-- **Audio Codec:** AAC (if source has audio)
+- **Aspect Ratio:** 9:16 (portrait) for video output
+- **Default Resolution:** 1080x1920 for video output
+- **Container:** MP4 with web-optimized flags for video, MP3 for audio-only
+- **Video Codec:** H.264 (libx264) for video output
+- **Audio Codec:** AAC (if source has audio) for video, MP3 for audio-only
 
 ## Error Handling
 

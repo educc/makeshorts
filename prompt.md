@@ -5,5 +5,5 @@ I want to create 1 clip for youtube shorts, you must read the examples/video.srt
 3. Carefully select differents segments of the video align of the clip goal, each segment is a line of the video.srt, the complete clip must be compose using different segments. The complete segment makes sense.
 4. Read the README.md to understand how to use the make_shorts.py cli tool.
 5. Create a bash script that contains how to create the clip using make_shorts.py, this script support multiple segments according to the docs README.md
-6. This bash script make use make_shorts.py using video.mp4 and this argument -scale-mode crop. 
+6. This bash script make use make_shorts.py using video.mp4 and this argument --scale-mode crop and --only-audio. 
 7. You must carefully select the name of the file for the short in spanish.

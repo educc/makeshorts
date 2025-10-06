@@ -134,5 +134,6 @@ node_modules/
 
 *.mp4
 *.srt
+*.mp3
 examples/
 old_shorts/

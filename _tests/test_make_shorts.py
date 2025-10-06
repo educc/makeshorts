@@ -13,7 +13,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from make_shorts import (
     parse_time, parse_time_pairs, parse_resolution,
-    validate_and_clamp_ranges, build_filter_complex
+    validate_and_clamp_ranges, build_filter_complex,
+    build_audio_filter_complex, build_audio_ffmpeg_command
 )
 
 
@@ -175,6 +176,80 @@ class TestFilterComplex:
         assert 'force_original_aspect_ratio' not in filter_str
         assert 'pad=' not in filter_str
         assert 'crop=' not in filter_str
+
+
+class TestAudioFilterComplex:
+    """Test audio filter complex functionality."""
+    
+    def test_build_audio_filter_complex_single_clip(self):
+        """Test audio filter complex for single clip."""
+        ranges = [(10.0, 20.0)]
+        filter_str = build_audio_filter_complex(ranges)
+        
+        # Should contain audio trim for the clip
+        assert 'atrim=start=10.0:end=20.0' in filter_str
+        assert 'asetpts=PTS-STARTPTS' in filter_str
+        assert '[a0]' in filter_str
+        
+        # Should concatenate audio only (v=0:a=1)
+        assert 'concat=n=1:v=0:a=1' in filter_str
+        assert '[outa]' in filter_str
+    
+    def test_build_audio_filter_complex_multiple_clips(self):
+        """Test audio filter complex for multiple clips."""
+        ranges = [(10.0, 20.0), (30.0, 40.0), (50.0, 60.0)]
+        filter_str = build_audio_filter_complex(ranges)
+        
+        # Should contain components for all clips
+        assert 'atrim=start=10.0:end=20.0' in filter_str
+        assert 'atrim=start=30.0:end=40.0' in filter_str
+        assert 'atrim=start=50.0:end=60.0' in filter_str
+        
+        # Should have labels for all clips
+        assert '[a0]' in filter_str
+        assert '[a1]' in filter_str
+        assert '[a2]' in filter_str
+        
+        # Should concatenate all three clips (n=3)
+        assert 'concat=n=3:v=0:a=1' in filter_str
+        assert '[a0][a1][a2]concat' in filter_str
+    
+    def test_build_audio_filter_complex_empty_ranges(self):
+        """Test audio filter complex with empty ranges."""
+        with pytest.raises(ValueError, match="No valid ranges to process"):
+            build_audio_filter_complex([])
+
+
+class TestAudioFFmpegCommand:
+    """Test audio ffmpeg command building."""
+    
+    def test_build_audio_ffmpeg_command(self):
+        """Test building audio-only ffmpeg command."""
+        filter_complex = "[0:a]atrim=start=0:end=5,asetpts=PTS-STARTPTS[a0]; [a0]concat=n=1:v=0:a=1[outa]"
+        cmd = build_audio_ffmpeg_command("input.mp4", "output.mp3", filter_complex, "libmp3lame", "128k")
+        
+        expected = [
+            'ffmpeg', '-i', 'input.mp4',
+            '-filter_complex', filter_complex,
+            '-map', '[outa]',
+            '-c:a', 'libmp3lame',
+            '-b:a', '128k',
+            'output.mp3'
+        ]
+        
+        assert cmd == expected
+    
+    def test_build_audio_ffmpeg_command_custom_codec(self):
+        """Test building audio command with custom codec and bitrate."""
+        filter_complex = "[0:a]atrim=start=0:end=5,asetpts=PTS-STARTPTS[a0]; [a0]concat=n=1:v=0:a=1[outa]"
+        cmd = build_audio_ffmpeg_command("test.mkv", "test.mp3", filter_complex, "libmp3lame", "192k")
+        
+        assert 'test.mkv' in cmd
+        assert 'test.mp3' in cmd
+        assert '-c:a' in cmd
+        assert 'libmp3lame' in cmd
+        assert '-b:a' in cmd
+        assert '192k' in cmd
 
 
 if __name__ == '__main__':

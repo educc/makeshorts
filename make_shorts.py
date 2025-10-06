@@ -202,6 +202,38 @@ def parse_resolution(resolution_str: str) -> Tuple[int, int]:
         raise ValueError(f"Invalid resolution format: '{resolution_str}'. Use WIDTHxHEIGHT (e.g., 1080x1920)")
 
 
+def build_audio_filter_complex(ranges: List[Tuple[float, float]]) -> str:
+    """
+    Build ffmpeg filter_complex string for concatenating multiple audio clips.
+    
+    Args:
+        ranges: List of (start, end) time pairs
+    
+    Returns:
+        Complete filter_complex string for audio concatenation
+    """
+    if not ranges:
+        raise ValueError("No valid ranges to process")
+    
+    filter_parts = []
+    audio_labels = []
+    
+    # Create filter chains for each audio segment
+    for i, (start, end) in enumerate(ranges):
+        audio_filter = f"[0:a]atrim=start={start}:end={end},asetpts=PTS-STARTPTS[a{i}]"
+        filter_parts.append(audio_filter)
+        audio_labels.append(f"[a{i}]")
+    
+    # Concatenation filter for audio only
+    n_segments = len(ranges)
+    concat_inputs = ''.join(audio_labels)
+    concat_filter = f"{concat_inputs}concat=n={n_segments}:v=0:a=1[outa]"
+    
+    filter_parts.append(concat_filter)
+    
+    return '; '.join(filter_parts)
+
+
 def build_filter_complex(ranges: List[Tuple[float, float]], target_width: int, target_height: int, 
                         scale_mode: str, has_audio: bool) -> str:
     """
@@ -263,6 +295,21 @@ def build_filter_complex(ranges: List[Tuple[float, float]], target_width: int, t
     return '; '.join(filter_parts)
 
 
+def build_audio_ffmpeg_command(input_path: str, output_path: str, filter_complex: str,
+                              codec_a: str, audio_bitrate: str) -> List[str]:
+    """Build complete ffmpeg command for audio-only extraction."""
+    cmd = [
+        'ffmpeg', '-i', input_path,
+        '-filter_complex', filter_complex,
+        '-map', '[outa]',
+        '-c:a', codec_a,
+        '-b:a', audio_bitrate,
+        output_path
+    ]
+    
+    return cmd
+
+
 def build_ffmpeg_command(input_path: str, output_path: str, filter_complex: str, 
                         has_audio: bool, codec_v: str, crf: int, preset: str,
                         codec_a: str, audio_bitrate: str) -> List[str]:
@@ -316,6 +363,7 @@ Examples:
   python make_shorts.py input.mp4 00:00:10 00:00:30 00:05:00 00:05:20
   python make_shorts.py input.mp4 10 30 --output shorts.mp4 --resolution 1080x1920
   python make_shorts.py input.mp4 10 30 300 320 --scale-mode crop --dry-run
+  python make_shorts.py input.mp4 10 30 --only-audio --output audio.mp3
         """
     )
     
@@ -350,11 +398,23 @@ Examples:
                        help='Cap final output length (seconds)')
     parser.add_argument('--clamp', action='store_true',
                        help='Clamp start/end to input duration instead of failing')
+    parser.add_argument('--only-audio', action='store_true',
+                       help='Extract only audio and output as MP3')
     
     args = parser.parse_args()
     
     # Setup logging
     setup_logging(args.verbose)
+    
+    # Adjust output file extension for audio-only mode
+    if args.only_audio and not args.output.lower().endswith('.mp3'):
+        if args.output == 'shorts.mp4':  # Default output
+            args.output = 'shorts.mp3'
+        else:
+            # Change extension to .mp3
+            output_path = Path(args.output)
+            args.output = str(output_path.with_suffix('.mp3'))
+            logging.info(f"Changed output extension to .mp3 for audio-only mode: {args.output}")
     
     try:
         # Validate input file exists
@@ -378,6 +438,10 @@ Examples:
         
         logging.info(f"Video duration: {video_info['duration']:.2f}s")
         logging.info(f"Has audio: {video_info['has_audio']}")
+        
+        # Check audio availability for audio-only mode
+        if args.only_audio and not video_info['has_audio']:
+            raise ValueError("Cannot extract audio: input video has no audio stream")
         
         # Validate and clamp ranges
         validated_ranges = validate_and_clamp_ranges(ranges, video_info['duration'], args.clamp)
@@ -409,21 +473,31 @@ Examples:
                         break
                 validated_ranges = new_ranges
         
-        # Parse resolution
-        target_width, target_height = parse_resolution(args.resolution)
-        
-        # Build filter complex
-        filter_complex = build_filter_complex(
-            validated_ranges, target_width, target_height, 
-            args.scale_mode, video_info['has_audio']
-        )
-        
-        # Build ffmpeg command
-        cmd = build_ffmpeg_command(
-            args.input_path, args.output, filter_complex,
-            video_info['has_audio'], args.codec_v, args.crf, args.preset,
-            args.codec_a, args.audio_bitrate
-        )
+        # Build filter complex and ffmpeg command based on mode
+        if args.only_audio:
+            # Audio-only mode
+            filter_complex = build_audio_filter_complex(validated_ranges)
+            cmd = build_audio_ffmpeg_command(
+                args.input_path, args.output, filter_complex,
+                'libmp3lame', args.audio_bitrate  # Force MP3 codec for audio-only
+            )
+        else:
+            # Video mode (original behavior)
+            # Parse resolution
+            target_width, target_height = parse_resolution(args.resolution)
+            
+            # Build filter complex
+            filter_complex = build_filter_complex(
+                validated_ranges, target_width, target_height, 
+                args.scale_mode, video_info['has_audio']
+            )
+            
+            # Build ffmpeg command
+            cmd = build_ffmpeg_command(
+                args.input_path, args.output, filter_complex,
+                video_info['has_audio'], args.codec_v, args.crf, args.preset,
+                args.codec_a, args.audio_bitrate
+            )
         
         if args.dry_run:
             print("Generated ffmpeg command:")
