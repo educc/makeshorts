@@ -21,9 +21,11 @@ def test_integration():
     print(f"Testing with video: {video_path}")
     print(f"sys.executable: {sys.executable}")
     
-    # Test basic functionality
-    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_file:
-        output_path = tmp_file.name
+    # Test basic functionality - use mktemp instead of NamedTemporaryFile
+    # to avoid file handle conflicts with ffmpeg
+    import time
+    temp_dir = tempfile.gettempdir()
+    output_path = os.path.join(temp_dir, f"test_output_{int(time.time() * 1000000)}.mp4")
     
     try:
         # Run the script - use sys.executable to get the right Python
