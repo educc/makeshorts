@@ -7,6 +7,91 @@ A Python CLI tool that extracts multiple ranges from a source video and concaten
 - Python 3.9+
 - ffmpeg and ffprobe installed and available in PATH
 
+### Installing Python
+
+**macOS:**
+
+Install pyenv using Homebrew:
+```bash
+brew install pyenv
+```
+
+Add pyenv to your shell (assuming zsh):
+```bash
+echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.zshrc
+echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.zshrc
+echo 'eval "$(pyenv init -)"' >> ~/.zshrc
+```
+
+Restart your terminal or run `source ~/.zshrc`.
+
+Install Python 3.13.7:
+```bash
+pyenv install 3.13.7
+pyenv global 3.13.7
+```
+
+**Linux (Ubuntu/Debian):**
+
+Install required dependencies:
+```bash
+sudo apt update
+sudo apt install -y build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev curl libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+```
+
+Install pyenv:
+```bash
+curl https://pyenv.run | bash
+```
+
+Add pyenv to your shell (assuming bash):
+```bash
+echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+```
+
+Restart your terminal or run `source ~/.bashrc`.
+
+Install Python 3.13.7:
+```bash
+pyenv install 3.13.7
+pyenv global 3.13.7
+```
+
+**Windows:**
+
+Install pyenv-win using Chocolatey:
+```bash
+choco install pyenv-win
+```
+
+Alternatively, download and install from https://github.com/pyenv-win/pyenv-win.
+
+Install Python 3.13.7:
+```bash
+pyenv install 3.13.7
+pyenv global 3.13.7
+```
+
+### Setting up Virtual Environment
+
+Create and activate a virtual environment:
+```bash
+python -m venv .venv
+```
+
+Activate the virtual environment:
+- **macOS/Linux:** `source .venv/bin/activate`
+- **Windows:** `.venv\Scripts\activate`
+
+### Installing Dependencies
+
+Install the required Python packages:
+```bash
+pip install -r requirements.txt
+```
+
 ### Installing ffmpeg
 
 **macOS (using Homebrew):**

@@ -5,6 +5,7 @@ Integration test for make_shorts.py - tests end-to-end functionality
 
 import pytest
 import subprocess
+import sys
 import tempfile
 import os
 from pathlib import Path
@@ -12,12 +13,13 @@ from pathlib import Path
 def test_integration():
     """Test that the script creates a valid output with expected properties."""
     
-    # Path to the example video and script
+        # Path to the example video and script
     script_path = Path(__file__).parent.parent / "make_shorts.py"
-    video_path = Path(__file__).parent.parent / "examples" / "video.mp4"
+    video_path = Path(__file__).parent.parent / "examples" / "ai-tech-jobs.mp4"
     
     print(f"Testing with script: {script_path}")
     print(f"Testing with video: {video_path}")
+    print(f"sys.executable: {sys.executable}")
     
     # Test basic functionality
     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_file:
@@ -25,7 +27,6 @@ def test_integration():
     
     try:
         # Run the script - use sys.executable to get the right Python
-        import sys
         cmd = [
             sys.executable, str(script_path),
             str(video_path),
@@ -34,7 +35,13 @@ def test_integration():
             "--resolution", "720x1280"  # Use smaller resolution for faster test
         ]
         
+        print(f"Running cmd: {cmd}")
+        
         result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        print(f"Return code: {result.returncode}")
+        print(f"Stdout: {result.stdout}")
+        print(f"Stderr: {result.stderr}")
         
         if result.returncode != 0:
             pytest.fail(f"Script failed with code {result.returncode}\nStdout: {result.stdout}\nStderr: {result.stderr}")
