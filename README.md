@@ -267,3 +267,8 @@ To cut the large video.
 ```bash
 ffmpeg -i video_raw.mp4 -ss 00:27:00 -c copy video.mp4
 ```
+
+Burn subtitles to a video
+```bash
+ffmpeg -i input.mp4 -vf subtitles=subtitles.srt -c:a copy output.mp4
+```
