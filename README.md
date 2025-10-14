@@ -261,3 +261,9 @@ Test with the included example video:
 ```bash
 python make_shorts.py examples/video.mp4 0 5 10 15 --output test_shorts.mp4
 ```
+## Utils
+
+To cut the large video.
+```bash
+ffmpeg -i video_raw.mp4 -ss 00:27:00 -c copy video.mp4
+```
