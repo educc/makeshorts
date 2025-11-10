@@ -270,6 +270,12 @@ ffmpeg -i video_raw.mp4 -ss 00:27:00 -c copy video.mp4
 
 Burn subtitles to a video
 ```bash
+# using position
+ffmpeg -i examples/melisa_ganadora_overlay.mp4 \
+-vf "subtitles=examples/melisa_ganadora_overlay.srt:force_style='Alignment=2,MarginV=70'" \
+-c:a copy newsub.mp4
+
+# basic example
 ffmpeg -i input.mp4 -vf subtitles=subtitles.srt -c:a copy output.mp4
 ```
 
