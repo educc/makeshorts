@@ -272,3 +272,8 @@ Burn subtitles to a video
 ```bash
 ffmpeg -i input.mp4 -vf subtitles=subtitles.srt -c:a copy output.mp4
 ```
+
+Burn an image to a video
+```bash
+ffmpeg -i melisa_ganadora_verificada.mp4 -i overlay.png -filter_complex "overlay=x=50:y=100" -codec:a copy melisa_ganadora_overlay.mp4
+```
