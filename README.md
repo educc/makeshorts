@@ -2,6 +2,23 @@
 
 A Python CLI tool that extracts multiple ranges from a source video and concatenates them into a single vertical (phone-ratio) MP4 suitable for YouTube Shorts.
 
+## Steps:
+
+1. Obtener el video con los subtítulos (archivo SRT)
+2. Seleccionar los segmentos del video para el clip (manual o con IA)
+3. Usar el programar para crear el clip. Ver `examples/generar_clip_melisa.sh`
+4. Crear los subtítulos del clip (transcribe.py), corregir el subtítulo manualmente.
+5. Usar `ffmpeg` para pegar los subtítulos corregidos al video.
+```bash
+ffmpeg -i examples/melisa_ganadora_overlay.mp4 \
+-vf "subtitles=examples/melisa_ganadora_overlay.srt:force_style='Alignment=2,MarginV=70'" \
+-c:a copy newsub.mp4
+```
+6. Pegar una banner en la parte superior
+```bash
+ffmpeg -i melisa_ganadora_verificada.mp4 -i overlay.png -filter_complex "overlay=x=50:y=100" -codec:a copy melisa_ganadora_overlay.mp4
+```
+
 ## Requirements
 
 - Python 3.9+
