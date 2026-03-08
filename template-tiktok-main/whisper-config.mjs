@@ -26,7 +26,7 @@ export const WHISPER_VERSION = "1.6.0";
 /**
  * @type {import('@remotion/install-whisper-cpp').WhisperModel}
  */
-export const WHISPER_MODEL = "medium.en";
+export const WHISPER_MODEL = "medium.es";
 
 // Language to transcribe
 // If you set another language than 'en', remove .en from the WHISPER_MODEL
@@ -34,4 +34,4 @@ export const WHISPER_MODEL = "medium.en";
 /**
  * @type {import('@remotion/install-whisper-cpp').Language}
  */
-export const WHISPER_LANG = "en";
+export const WHISPER_LANG = "es";
