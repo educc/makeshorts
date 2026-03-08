@@ -22,7 +22,7 @@ const SUPPORTED_EXTENSIONS = new Set([".mp4", ".webm", ".mkv", ".mov"]);
 const WHISPER_PATH = path.join(process.cwd(), "whisper.cpp");
 
 // The version of Whisper.cpp to install
-const WHISPER_VERSION = "1.6.0";
+const WHISPER_VERSION = "1.8.3";
 
 // Keep parity with the previous whisper-config.mjs defaults.
 const WHISPER_MODEL =
@@ -30,6 +30,19 @@ const WHISPER_MODEL =
     "medium.es") as WhisperModel;
 const WHISPER_LANG = ((process.env.WHISPER_LANG as Language | undefined) ??
   "es") as Language;
+
+const ensureWhisperInstallDirReady = () => {
+  const expectedBinaryPath = path.join(
+    WHISPER_PATH,
+    "build",
+    "bin",
+    "whisper-cli",
+  );
+
+  if (existsSync(WHISPER_PATH) && !existsSync(expectedBinaryPath)) {
+    rmSync(WHISPER_PATH, { recursive: true, force: true });
+  }
+};
 
 const extractToTempAudioFile = (videoFilePath: string, tempOutFile: string) => {
   execSync(
@@ -75,6 +88,8 @@ const main = async () => {
 
   mkdirSync(tempDir, { recursive: true });
   mkdirSync(workDir, { recursive: true });
+
+  ensureWhisperInstallDirReady();
 
   console.log(`Installing whisper.cpp ${WHISPER_VERSION} in ${WHISPER_PATH}`);
   await installWhisperCpp({ to: WHISPER_PATH, version: WHISPER_VERSION });
