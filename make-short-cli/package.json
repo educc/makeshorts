@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "A Bun-based Remotion template for TikTok-style captions",
   "scripts": {
-    "dev": "bunx remotion studio",
-    "build": "bunx remotion bundle",
-    "render": "bunx remotion render",
+    "dev": "bunx remotion studio src/captionedvideo/index.ts",
+    "build": "bunx remotion bundle src/captionedvideo/index.ts",
+    "render": "bunx remotion render src/captionedvideo/index.ts",
     "upgrade": "bunx remotion upgrade",
     "lint": "eslint src && tsc",
     "create-subtitles": "bun src/cli/video2sub.ts"
