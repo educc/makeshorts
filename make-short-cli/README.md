@@ -73,6 +73,12 @@ Pick the most viral subtitle segment using an LLM and write a short-only JSON in
 bun run create-short ./out/winner02.json --seconds 20
 ```
 
+Generate subtitles, select short parts, cut/join the short video, and render captioned output in one command:
+
+```console
+bun run short ./examples/winner02.mp4 --seconds 20
+```
+
 Optional flags:
 
 - `--model <name>`: Override model per run (for example `--model gpt-5-mini`)
@@ -86,10 +92,13 @@ Environment variables for the short selector:
 - `OPENAI_SHORT_MODEL` (default: `gpt-5-mini`)
 - `OPENAI_API_KEY` (required only when calling official OpenAI API)
 
-This command creates:
+The `short` command creates:
 
 - `out/<video-name>.json`
-- `out/<video-name>-captioned.mp4`
+- `out/<video-name>_<seconds>s.selection.json`
+- `out/<video-name>_<seconds>s.mp4`
+- `out/<video-name>_<seconds>s.json`
+- `out/<video-name>_<seconds>s-captioned.mp4`
 
 Before rendering, it cleans `public/` and copies the required runtime files there:
 

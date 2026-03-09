@@ -10,7 +10,8 @@
     "lint": "eslint src && tsc",
     "create-subtitles": "bun src/cli/video2sub.ts",
     "add-subtitle-to-video": "bun src/cli/add-subtitle-to-video.ts",
-    "create-short": "bun src/cli/short.ts"
+    "create-short": "bun src/cli/create-short.ts",
+    "short": "bun src/cli/short.ts"
   },
   "repository": {},
   "license": "UNLICENSED",

@@ -1,8 +1,10 @@
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -15,91 +17,40 @@ type SubtitleCaption = {
   confidence: number;
 };
 
-type TranscriptChunk = {
-  id: number;
-  startMs: number;
-  endMs: number;
-  text: string;
-};
-
-type ShortSegment = {
+type SelectionSegment = {
   startChunkId: number;
   endChunkId: number;
-};
-
-type ShortSelection = {
-  segments: ShortSegment[];
-  viralityScore: number;
-  hook: string;
-  reason: string;
-};
-
-type EvaluatedSegment = ShortSegment & {
   startMs: number;
   endMs: number;
   durationSec: number;
 };
 
-type EvaluatedSelection = ShortSelection & {
-  iteration: number;
-  startMs: number;
-  endMs: number;
-  totalDurationSec: number;
-  segmentsWithTime: EvaluatedSegment[];
-  normalizedScore: number;
-};
-
+const SUPPORTED_EXTENSIONS = new Set([".mp4", ".webm", ".mkv", ".mov"]);
 const DEFAULT_SECONDS = 20;
 const DEFAULT_MAX_ITERATIONS = 3;
 const MAX_ITERATIONS = 10;
-const DEFAULT_OPENAI_BASE_URL = "http://localhost:3009";
-const DEFAULT_OPENAI_MODEL = "gpt-5-mini";
 
-const SYSTEM_PROMPT = `You are an elite short-form video editor and viral content strategist.
-
-Your job is to select subtitle chunks that will become a short video for TikTok, YouTube Shorts, and Instagram Reels.
-
-Primary objective:
-- Maximize retention and shareability while keeping the story understandable.
-
-Hard constraints:
-- You may select one or multiple segments.
-- Each segment must use startChunkId and endChunkId (inclusive).
-- Segments can come from any part of the video.
-- Segments must be in chronological order and must not overlap.
-- The total combined duration across all selected segments must be <= targetSeconds.
-
-Understanding constraints:
-- The final selected segments must make sense together as a coherent short.
-- Viewers must understand what is happening without needing extra context.
-- Prefer natural language flow and avoid confusing jumps.
-
-Selection principles:
-- Prefer moments with a strong hook in the first 1-2 seconds.
-- Prefer emotional spikes, surprise, tension, payoff, social proof, or clear transformation.
-- Avoid long low-energy build-up.
-- If multiple candidates are close, favor the one that is easier to understand instantly and likely to spark comments/shares.
-
-Optimization behavior:
-- You may receive previous attempts and a current best score.
-- Propose a better set of segments when possible.
-- Be strict and realistic with viralityScore (0-100).
-
-Output rules:
-- Return valid JSON only.
-- Follow the required schema exactly.
-- Do not include markdown, prose outside JSON, or extra keys.`;
+const usage = () => {
+  return "Usage: bun src/cli/short.ts <path-to-video> [--seconds <number>] [--model <name>] [--max-iterations <1-10>]";
+};
 
 const isFiniteNumber = (value: unknown): value is number => {
   return typeof value === "number" && Number.isFinite(value);
 };
 
-const usage = () => {
-  return "Usage: bun src/cli/short.ts <subtitle-json-file> [--seconds <number>] [--model <name>] [--max-iterations <1-10>]";
+const run = (command: string, args: string[]) => {
+  const result = spawnSync(command, args, {
+    cwd: process.cwd(),
+    stdio: "inherit",
+  });
+
+  if (result.status !== 0) {
+    throw new Error(`Command failed: ${command} ${args.join(" ")}`);
+  }
 };
 
 const parseArgs = (args: string[]) => {
-  let filenameArg: string | null = null;
+  let videoArg: string | null = null;
   let seconds = DEFAULT_SECONDS;
   let modelArg: string | null = null;
   let maxIterations = DEFAULT_MAX_ITERATIONS;
@@ -194,42 +145,54 @@ const parseArgs = (args: string[]) => {
       throw new Error(`Unknown option: ${arg}`);
     }
 
-    if (filenameArg) {
+    if (videoArg) {
       throw new Error(`Unexpected argument: ${arg}`);
     }
 
-    filenameArg = arg;
+    videoArg = arg;
   }
 
-  if (!filenameArg) {
+  if (!videoArg) {
     throw new Error(usage());
   }
 
   return {
-    filenameArg,
+    videoArg,
     seconds,
     modelArg,
     maxIterations,
   };
 };
 
-const resolveSubtitleJson = (filenameArg: string) => {
-  const subtitlePath = path.resolve(process.cwd(), filenameArg);
+const resolveInputVideo = (videoArg: string) => {
+  const videoPath = path.resolve(process.cwd(), videoArg);
 
-  if (!existsSync(subtitlePath)) {
-    throw new Error(`Subtitle JSON file not found: ${subtitlePath}`);
+  if (!existsSync(videoPath)) {
+    throw new Error(`Video file not found: ${videoPath}`);
   }
 
-  const stat = lstatSync(subtitlePath);
+  const stat = lstatSync(videoPath);
   if (stat.isDirectory()) {
-    throw new Error(`Expected a file but got a directory: ${subtitlePath}`);
+    throw new Error(`Expected a file but got a directory: ${videoPath}`);
   }
 
-  if (path.extname(subtitlePath).toLowerCase() !== ".json") {
-    throw new Error(`Subtitle file must be a .json file: ${subtitlePath}`);
+  const extension = path.extname(videoPath).toLowerCase();
+  if (!SUPPORTED_EXTENSIONS.has(extension)) {
+    throw new Error(
+      `Unsupported extension "${extension}". Use: ${Array.from(SUPPORTED_EXTENSIONS).join(", ")}`,
+    );
   }
 
-  return subtitlePath;
+  return videoPath;
+};
+
+const formatSecondsForFileName = (seconds: number) => {
+  const rounded = Number(seconds.toFixed(3));
+  if (Number.isInteger(rounded)) {
+    return `${rounded}`;
+  }
+
+  return `${rounded}`.replace(".", "_");
 };
 
 const validateSubtitleJson = (subtitleJsonPath: string): SubtitleCaption[] => {
@@ -246,7 +209,7 @@ const validateSubtitleJson = (subtitleJsonPath: string): SubtitleCaption[] => {
     );
   }
 
-  const captions = parsed.map((entry, index) => {
+  const subtitles = parsed.map((entry, index) => {
     if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
       throw new Error(
         `Invalid caption at index ${index} in ${subtitleJsonPath}. Expected an object.`,
@@ -294,676 +257,373 @@ const validateSubtitleJson = (subtitleJsonPath: string): SubtitleCaption[] => {
     };
   });
 
-  if (captions.length === 0) {
+  if (subtitles.length === 0) {
     throw new Error(`Subtitle JSON has no captions: ${subtitleJsonPath}`);
   }
 
-  return captions;
+  return subtitles;
 };
 
-const normalizeToken = (text: string) => {
-  return text.replace(/\s+/g, " ").trim();
-};
-
-const getWordCount = (text: string) => {
-  return text
-    .trim()
-    .split(/\s+/)
-    .filter((part) => part.length > 0).length;
-};
-
-const buildTranscriptChunks = (
-  captions: SubtitleCaption[],
-): TranscriptChunk[] => {
-  const chunks: TranscriptChunk[] = [];
-
-  let currentTextParts: string[] = [];
-  let currentStartMs = 0;
-  let currentEndMs = 0;
-  let currentWordCount = 0;
-  let hasOpenChunk = false;
-
-  const closeChunk = () => {
-    if (!hasOpenChunk) {
-      return;
-    }
-
-    const text = currentTextParts.join(" ").replace(/\s+/g, " ").trim();
-    if (text.length > 0) {
-      chunks.push({
-        id: chunks.length,
-        startMs: currentStartMs,
-        endMs: currentEndMs,
-        text,
-      });
-    }
-
-    currentTextParts = [];
-    currentWordCount = 0;
-    hasOpenChunk = false;
-  };
-
-  for (let index = 0; index < captions.length; index++) {
-    const caption = captions[index];
-    const token = normalizeToken(caption.text);
-    if (token.length === 0) {
-      continue;
-    }
-
-    if (!hasOpenChunk) {
-      currentStartMs = caption.startMs;
-      currentEndMs = caption.endMs;
-      currentTextParts = [token];
-      currentWordCount = getWordCount(token);
-      hasOpenChunk = true;
-    } else {
-      currentTextParts.push(token);
-      currentEndMs = caption.endMs;
-      currentWordCount += getWordCount(token);
-    }
-
-    const nextCaption = captions[index + 1] ?? null;
-    const gapToNext = nextCaption
-      ? nextCaption.startMs - caption.endMs
-      : Infinity;
-    const chunkDuration = currentEndMs - currentStartMs;
-    const punctuationBoundary = /[.!?]$/.test(token);
-    const gapBoundary = gapToNext > 650;
-    const maxDurationBoundary = chunkDuration >= 4200;
-    const maxWordsBoundary = currentWordCount >= 18;
-
-    if (
-      !nextCaption ||
-      punctuationBoundary ||
-      gapBoundary ||
-      maxDurationBoundary ||
-      maxWordsBoundary
-    ) {
-      closeChunk();
-    }
-  }
-
-  closeChunk();
-
-  if (chunks.length === 0) {
-    throw new Error(
-      "Could not build transcript chunks from the subtitle file.",
-    );
-  }
-
-  return chunks;
-};
-
-const formatChunksForPrompt = (chunks: TranscriptChunk[]) => {
-  return chunks
-    .map((chunk) => {
-      return `#${chunk.id} [${chunk.startMs}-${chunk.endMs}] ${chunk.text}`;
-    })
-    .join("\n");
-};
-
-const buildJsonSchemaResponseFormat = () => {
-  return {
-    type: "json_schema",
-    json_schema: {
-      name: "viral_short_selection",
-      strict: true,
-      schema: {
-        type: "object",
-        additionalProperties: false,
-        required: ["segments", "viralityScore", "hook", "reason"],
-        properties: {
-          segments: {
-            type: "array",
-            minItems: 1,
-            maxItems: 4,
-            items: {
-              type: "object",
-              additionalProperties: false,
-              required: ["startChunkId", "endChunkId"],
-              properties: {
-                startChunkId: { type: "integer" },
-                endChunkId: { type: "integer" },
-              },
-            },
-          },
-          viralityScore: { type: "number", minimum: 0, maximum: 100 },
-          hook: { type: "string", minLength: 1 },
-          reason: { type: "string", minLength: 1 },
-        },
-      },
-    },
-  };
-};
-
-const extractApiErrorMessage = (raw: string) => {
-  try {
-    const parsed = JSON.parse(raw) as {
-      error?: { message?: string };
-      message?: string;
-    };
-    if (parsed.error?.message) {
-      return parsed.error.message;
-    }
-    if (parsed.message) {
-      return parsed.message;
-    }
-  } catch {
-    // noop
-  }
-
-  return raw;
-};
-
-const extractContentFromChatCompletion = (payload: unknown): string => {
-  if (
-    typeof payload !== "object" ||
-    payload === null ||
-    Array.isArray(payload)
-  ) {
-    throw new Error("Invalid OpenAI response format.");
-  }
-
-  const root = payload as Record<string, unknown>;
-  if (!Array.isArray(root.choices) || root.choices.length === 0) {
-    throw new Error("OpenAI response does not include choices.");
-  }
-
-  const firstChoice = root.choices[0];
-  if (
-    typeof firstChoice !== "object" ||
-    firstChoice === null ||
-    Array.isArray(firstChoice)
-  ) {
-    throw new Error("OpenAI response choice is invalid.");
-  }
-
-  const choice = firstChoice as Record<string, unknown>;
-  const message = choice.message;
-  if (
-    typeof message !== "object" ||
-    message === null ||
-    Array.isArray(message)
-  ) {
-    throw new Error("OpenAI response choice has no message.");
-  }
-
-  const content = (message as Record<string, unknown>).content;
-  if (typeof content === "string") {
-    return content;
-  }
-
-  if (Array.isArray(content)) {
-    const textParts = content
-      .map((part) => {
-        if (typeof part === "string") {
-          return part;
-        }
-
-        if (typeof part !== "object" || part === null || Array.isArray(part)) {
-          return "";
-        }
-
-        const record = part as Record<string, unknown>;
-        if (typeof record.text === "string") {
-          return record.text;
-        }
-
-        return "";
-      })
-      .filter((part) => part.length > 0);
-
-    if (textParts.length > 0) {
-      return textParts.join("\n");
-    }
-  }
-
-  throw new Error("OpenAI response has no readable message content.");
-};
-
-const stripCodeFence = (value: string) => {
-  const trimmed = value.trim();
-  const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  if (!match) {
-    return trimmed;
-  }
-  return match[1].trim();
-};
-
-const parseSelection = (rawContent: string): ShortSelection => {
-  const json = stripCodeFence(rawContent);
-
+const validateSelectionMetadata = (
+  metadataPath: string,
+): SelectionSegment[] => {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(json);
+    parsed = JSON.parse(readFileSync(metadataPath, "utf8"));
   } catch {
-    throw new Error(`Model response is not valid JSON: ${rawContent}`);
+    throw new Error(`Selection metadata is not valid JSON: ${metadataPath}`);
   }
 
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("Model response must be a JSON object.");
+    throw new Error(`Invalid selection metadata format in ${metadataPath}.`);
   }
 
   const record = parsed as Record<string, unknown>;
-  const segmentsRaw = record.segments;
-  const startChunkId = record.startChunkId;
-  const endChunkId = record.endChunkId;
-  const viralityScore = record.viralityScore;
-  const hook = record.hook;
-  const reason = record.reason;
-
-  const rawSegments: unknown[] = Array.isArray(segmentsRaw)
-    ? segmentsRaw
-    : Number.isInteger(startChunkId) && Number.isInteger(endChunkId)
-      ? [{ startChunkId, endChunkId }]
-      : [];
-
-  if (rawSegments.length === 0) {
-    throw new Error(
-      "segments must be a non-empty array (or include legacy startChunkId/endChunkId).",
-    );
+  if (!Array.isArray(record.segments)) {
+    throw new Error(`Missing "segments" array in ${metadataPath}.`);
   }
 
-  const segments = rawSegments.map((segment, index) => {
+  const segments = record.segments.map((segment, index) => {
     if (
       typeof segment !== "object" ||
       segment === null ||
       Array.isArray(segment)
     ) {
-      throw new Error(`segments[${index}] must be an object.`);
+      throw new Error(`Invalid segment at index ${index} in ${metadataPath}.`);
     }
 
-    const segmentRecord = segment as Record<string, unknown>;
-    const segmentStart = segmentRecord.startChunkId;
-    const segmentEnd = segmentRecord.endChunkId;
-
-    if (!Number.isInteger(segmentStart)) {
-      throw new Error(`segments[${index}].startChunkId must be an integer.`);
+    const value = segment as Record<string, unknown>;
+    if (!Number.isInteger(value.startChunkId)) {
+      throw new Error(
+        `Invalid segments[${index}].startChunkId in ${metadataPath}. Expected an integer.`,
+      );
     }
-    if (!Number.isInteger(segmentEnd)) {
-      throw new Error(`segments[${index}].endChunkId must be an integer.`);
+    if (!Number.isInteger(value.endChunkId)) {
+      throw new Error(
+        `Invalid segments[${index}].endChunkId in ${metadataPath}. Expected an integer.`,
+      );
+    }
+    if (!isFiniteNumber(value.startMs)) {
+      throw new Error(
+        `Invalid segments[${index}].startMs in ${metadataPath}. Expected a number.`,
+      );
+    }
+    if (!isFiniteNumber(value.endMs)) {
+      throw new Error(
+        `Invalid segments[${index}].endMs in ${metadataPath}. Expected a number.`,
+      );
+    }
+    if (!isFiniteNumber(value.durationSec)) {
+      throw new Error(
+        `Invalid segments[${index}].durationSec in ${metadataPath}. Expected a number.`,
+      );
+    }
+    if (value.endMs <= value.startMs) {
+      throw new Error(
+        `Invalid segment range at index ${index} in ${metadataPath}. endMs must be > startMs.`,
+      );
     }
 
     return {
-      startChunkId: Number(segmentStart),
-      endChunkId: Number(segmentEnd),
+      startChunkId: Number(value.startChunkId),
+      endChunkId: Number(value.endChunkId),
+      startMs: value.startMs,
+      endMs: value.endMs,
+      durationSec: value.durationSec,
     };
   });
 
-  if (!isFiniteNumber(viralityScore)) {
-    throw new Error("viralityScore must be a finite number.");
+  if (segments.length === 0) {
+    throw new Error(`No selection segments found in ${metadataPath}.`);
   }
-  if (typeof hook !== "string" || hook.trim().length === 0) {
-    throw new Error("hook must be a non-empty string.");
-  }
-  if (typeof reason !== "string" || reason.trim().length === 0) {
-    throw new Error("reason must be a non-empty string.");
-  }
-  return {
-    segments,
-    viralityScore,
-    hook: hook.trim(),
-    reason: reason.trim(),
-  };
+
+  return segments;
 };
 
-const evaluateSelection = (
-  selection: ShortSelection,
-  chunks: TranscriptChunk[],
-  targetSeconds: number,
-  iteration: number,
-): EvaluatedSelection => {
-  if (selection.segments.length === 0) {
-    throw new Error("At least one segment is required.");
-  }
+const escapeConcatFilePath = (value: string) => {
+  return value.replace(/'/g, "'\\''");
+};
 
-  if (selection.segments.length > 4) {
-    throw new Error("A maximum of 4 segments is allowed.");
-  }
+const createSegmentClips = (
+  inputVideoPath: string,
+  segments: SelectionSegment[],
+  tempDir: string,
+) => {
+  const segmentFiles: string[] = [];
 
-  const segmentsWithTime: EvaluatedSegment[] = [];
-  let previousEndChunkId = -1;
-  let totalDurationMs = 0;
-
-  for (let index = 0; index < selection.segments.length; index++) {
-    const segment = selection.segments[index];
-    if (segment.startChunkId < 0 || segment.startChunkId >= chunks.length) {
-      throw new Error(
-        `segments[${index}].startChunkId ${segment.startChunkId} is out of bounds for ${chunks.length} chunks.`,
-      );
+  for (let index = 0; index < segments.length; index++) {
+    const segment = segments[index];
+    const durationMs = segment.endMs - segment.startMs;
+    if (durationMs <= 0) {
+      throw new Error(`Selection segment ${index} has invalid duration.`);
     }
 
-    if (segment.endChunkId < 0 || segment.endChunkId >= chunks.length) {
-      throw new Error(
-        `segments[${index}].endChunkId ${segment.endChunkId} is out of bounds for ${chunks.length} chunks.`,
-      );
-    }
-
-    if (segment.endChunkId < segment.startChunkId) {
-      throw new Error(`segments[${index}] has endChunkId < startChunkId.`);
-    }
-
-    if (segment.startChunkId <= previousEndChunkId) {
-      throw new Error(
-        "Segments must be in chronological order and must not overlap.",
-      );
-    }
-
-    const startMs = chunks[segment.startChunkId].startMs;
-    const endMs = chunks[segment.endChunkId].endMs;
-    if (endMs <= startMs) {
-      throw new Error(`segments[${index}] has invalid timestamps.`);
-    }
-
-    const durationMs = endMs - startMs;
-    totalDurationMs += durationMs;
-    previousEndChunkId = segment.endChunkId;
-
-    segmentsWithTime.push({
-      ...segment,
-      startMs,
-      endMs,
-      durationSec: durationMs / 1000,
-    });
-  }
-
-  const totalDurationSec = totalDurationMs / 1000;
-  if (totalDurationSec > targetSeconds) {
-    throw new Error(
-      `Selected combined duration ${totalDurationSec.toFixed(2)}s exceeds target ${targetSeconds}s.`,
+    const segmentFilePath = path.join(
+      tempDir,
+      `segment-${String(index + 1).padStart(2, "0")}.mp4`,
     );
+
+    run("bunx", [
+      "remotion",
+      "ffmpeg",
+      "-y",
+      "-i",
+      inputVideoPath,
+      "-ss",
+      (segment.startMs / 1000).toFixed(3),
+      "-t",
+      (durationMs / 1000).toFixed(3),
+      "-c:v",
+      "libx264",
+      "-c:a",
+      "aac",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "22",
+      "-movflags",
+      "+faststart",
+      segmentFilePath,
+    ]);
+
+    segmentFiles.push(segmentFilePath);
   }
 
-  const boundedViralityScore = Math.max(
-    0,
-    Math.min(100, selection.viralityScore),
+  return segmentFiles;
+};
+
+const joinSegmentClips = (segmentFiles: string[], outputVideoPath: string) => {
+  if (segmentFiles.length === 1) {
+    run("bunx", [
+      "remotion",
+      "ffmpeg",
+      "-y",
+      "-i",
+      segmentFiles[0],
+      "-c",
+      "copy",
+      outputVideoPath,
+    ]);
+    return;
+  }
+
+  const listFilePath = path.join(
+    path.dirname(outputVideoPath),
+    "concat-list.txt",
   );
-  const utilizationBonus = Math.min(
-    10,
-    (totalDurationSec / targetSeconds) * 10,
+  const listContent = segmentFiles
+    .map((segmentPath) => `file '${escapeConcatFilePath(segmentPath)}'`)
+    .join("\n");
+  writeFileSync(listFilePath, `${listContent}\n`);
+
+  run("bunx", [
+    "remotion",
+    "ffmpeg",
+    "-y",
+    "-f",
+    "concat",
+    "-safe",
+    "0",
+    "-i",
+    listFilePath,
+    "-c:v",
+    "libx264",
+    "-c:a",
+    "aac",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "22",
+    "-movflags",
+    "+faststart",
+    outputVideoPath,
+  ]);
+};
+
+const buildRemappedCaptions = (
+  selectedCaptions: SubtitleCaption[],
+  segments: SelectionSegment[],
+): SubtitleCaption[] => {
+  const sortedCaptions = [...selectedCaptions].sort(
+    (a, b) => a.startMs - b.startMs,
   );
-  const normalizedScore = boundedViralityScore + utilizationBonus;
-  const firstSegment = segmentsWithTime[0];
-  const lastSegment = segmentsWithTime[segmentsWithTime.length - 1];
+  const remapped: SubtitleCaption[] = [];
+  let timelineOffsetMs = 0;
 
-  return {
-    ...selection,
-    iteration,
-    startMs: firstSegment.startMs,
-    endMs: lastSegment.endMs,
-    totalDurationSec,
-    segmentsWithTime,
-    normalizedScore,
-  };
-};
+  for (const segment of segments) {
+    for (const caption of sortedCaptions) {
+      if (caption.endMs <= segment.startMs) {
+        continue;
+      }
 
-const formatSelectionSegments = (segments: ShortSegment[]) => {
-  return segments
-    .map((segment) => `${segment.startChunkId}-${segment.endChunkId}`)
-    .join(", ");
-};
+      if (caption.startMs >= segment.endMs) {
+        continue;
+      }
 
-const buildUserPrompt = (
-  chunksPrompt: string,
-  targetSeconds: number,
-  best: EvaluatedSelection | null,
-  feedback: string,
-) => {
-  const bestSnapshot = best
-    ? `Current best: segments [${formatSelectionSegments(best.segments)}], combinedDuration ${best.totalDurationSec.toFixed(2)}s, normalizedScore ${best.normalizedScore.toFixed(2)}, viralityScore ${best.viralityScore.toFixed(2)}, hook "${best.hook}"`
-    : "Current best: none yet.";
+      const overlapStart = Math.max(caption.startMs, segment.startMs);
+      const overlapEnd = Math.min(caption.endMs, segment.endMs);
 
-  return [
-    `targetSeconds: ${targetSeconds}`,
-    bestSnapshot,
-    `Feedback from previous attempt: ${feedback}`,
-    "Return only JSON that matches the schema.",
-    "Transcript chunks:",
-    chunksPrompt,
-  ].join("\n\n");
-};
+      if (overlapEnd <= overlapStart) {
+        continue;
+      }
 
-const createCompletion = async (
-  endpoint: string,
-  apiKey: string | null,
-  model: string,
-  systemPrompt: string,
-  userPrompt: string,
-  useJsonSchema: boolean,
-) => {
-  const requestBody: Record<string, unknown> = {
-    model,
-    temperature: 0.2,
-    max_completion_tokens: 500,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-  };
+      const remappedStartMs =
+        timelineOffsetMs + (overlapStart - segment.startMs);
+      const remappedEndMs = timelineOffsetMs + (overlapEnd - segment.startMs);
 
-  if (useJsonSchema) {
-    requestBody.response_format = buildJsonSchemaResponseFormat();
-  } else {
-    requestBody.response_format = {
-      type: "json_object",
-    };
-  }
+      const remappedTimestampMs =
+        caption.timestampMs === null
+          ? null
+          : timelineOffsetMs +
+            (Math.min(Math.max(caption.timestampMs, overlapStart), overlapEnd) -
+              segment.startMs);
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
-  }
-
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(requestBody),
-  });
-
-  const rawBody = await response.text();
-  if (!response.ok) {
-    throw new Error(
-      `OpenAI API request failed (${response.status}): ${extractApiErrorMessage(rawBody)}`,
-    );
-  }
-
-  let payload: unknown;
-  try {
-    payload = JSON.parse(rawBody);
-  } catch {
-    throw new Error(`OpenAI API returned non-JSON response: ${rawBody}`);
-  }
-
-  return extractContentFromChatCompletion(payload);
-};
-
-const requestSelectionFromOpenAi = async (
-  endpoint: string,
-  apiKey: string | null,
-  model: string,
-  systemPrompt: string,
-  userPrompt: string,
-) => {
-  try {
-    return await createCompletion(
-      endpoint,
-      apiKey,
-      model,
-      systemPrompt,
-      userPrompt,
-      true,
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const schemaLikelyUnsupported =
-      message.includes("json_schema") ||
-      message.includes("response_format") ||
-      message.includes("Unsupported value");
-
-    if (!schemaLikelyUnsupported) {
-      throw error;
+      remapped.push({
+        text: caption.text,
+        startMs: remappedStartMs,
+        endMs: remappedEndMs,
+        timestampMs: remappedTimestampMs,
+        confidence: caption.confidence,
+      });
     }
 
-    return createCompletion(
-      endpoint,
-      apiKey,
-      model,
-      systemPrompt,
-      userPrompt,
-      false,
-    );
-  }
-};
-
-const formatSecondsForFileName = (seconds: number) => {
-  const rounded = Number(seconds.toFixed(3));
-  if (Number.isInteger(rounded)) {
-    return `${rounded}`;
+    timelineOffsetMs += segment.endMs - segment.startMs;
   }
 
-  return `${rounded}`.replace(".", "_");
-};
-
-const ensureOpenAiEndpoint = (modelArg: string | null) => {
-  const baseUrlRaw = process.env.OPENAI_BASE_URL ?? DEFAULT_OPENAI_BASE_URL;
-  let parsed: URL;
-  try {
-    parsed = new URL(baseUrlRaw);
-  } catch {
-    throw new Error(`Invalid OPENAI_BASE_URL: ${baseUrlRaw}`);
+  if (remapped.length === 0) {
+    throw new Error("Could not build remapped captions for the short video.");
   }
 
-  const model =
-    modelArg ??
-    process.env.OPENAI_SHORT_MODEL ??
-    process.env.OPENAI_MODEL ??
-    DEFAULT_OPENAI_MODEL;
-  const apiKey = process.env.OPENAI_API_KEY ?? null;
-  if (parsed.hostname === "api.openai.com" && !apiKey) {
-    throw new Error(
-      "OPENAI_API_KEY is required when OPENAI_BASE_URL points to api.openai.com.",
-    );
-  }
-
-  const endpoint = new URL("/v1/chat/completions", parsed).toString();
-  return { endpoint, apiKey, model, baseUrlRaw };
+  remapped.sort((a, b) => a.startMs - b.startMs);
+  return remapped;
 };
 
 const main = async () => {
-  const { filenameArg, seconds, modelArg, maxIterations } = parseArgs(
+  const { videoArg, seconds, modelArg, maxIterations } = parseArgs(
     process.argv.slice(2),
   );
-  const subtitlePath = resolveSubtitleJson(filenameArg);
-  const captions = validateSubtitleJson(subtitlePath);
-  const chunks = buildTranscriptChunks(captions);
-  const chunksPrompt = formatChunksForPrompt(chunks);
 
-  const { endpoint, apiKey, model, baseUrlRaw } =
-    ensureOpenAiEndpoint(modelArg);
-
-  let bestSelection: EvaluatedSelection | null = null;
-  let feedback = "No previous attempts yet.";
-  let roundsWithoutImprovement = 0;
-
-  for (let iteration = 1; iteration <= maxIterations; iteration++) {
-    const userPrompt = buildUserPrompt(
-      chunksPrompt,
-      seconds,
-      bestSelection,
-      feedback,
-    );
-
-    try {
-      const rawContent = await requestSelectionFromOpenAi(
-        endpoint,
-        apiKey,
-        model,
-        SYSTEM_PROMPT,
-        userPrompt,
-      );
-      const parsedSelection = parseSelection(rawContent);
-      const evaluated = evaluateSelection(
-        parsedSelection,
-        chunks,
-        seconds,
-        iteration,
-      );
-
-      if (
-        !bestSelection ||
-        evaluated.normalizedScore > bestSelection.normalizedScore
-      ) {
-        bestSelection = evaluated;
-        roundsWithoutImprovement = 0;
-        feedback = `Accepted. Improve this benchmark: normalizedScore=${evaluated.normalizedScore.toFixed(2)}, segments=[${formatSelectionSegments(evaluated.segments)}], combinedDuration=${evaluated.totalDurationSec.toFixed(2)}s, hook=${evaluated.hook}`;
-      } else {
-        roundsWithoutImprovement += 1;
-        feedback = `Rejected. Candidate score ${evaluated.normalizedScore.toFixed(2)} was not better than best ${bestSelection.normalizedScore.toFixed(2)}.`;
-      }
-    } catch (error) {
-      roundsWithoutImprovement += 1;
-      const message = error instanceof Error ? error.message : String(error);
-      feedback = `Invalid attempt. Fix all issues and return valid JSON. Error: ${message}`;
-    }
-
-    if (iteration >= 3 && roundsWithoutImprovement >= 3 && bestSelection) {
-      break;
-    }
-  }
-
-  if (!bestSelection) {
-    throw new Error(
-      `Could not produce a valid short after ${maxIterations} iterations. Check OpenAI connectivity and model compatibility at ${baseUrlRaw}.`,
-    );
-  }
-
-  const selectedCaptions = captions.filter((caption) => {
-    return bestSelection.segmentsWithTime.some((segment) => {
-      return caption.endMs > segment.startMs && caption.startMs < segment.endMs;
-    });
-  });
-
-  if (selectedCaptions.length === 0) {
-    throw new Error("The selected short has no captions after filtering.");
-  }
-
-  const inputBaseName = path.basename(subtitlePath, ".json");
+  const inputVideoPath = resolveInputVideo(videoArg);
+  const inputBaseName = path.basename(
+    inputVideoPath,
+    path.extname(inputVideoPath),
+  );
   const secondsLabel = formatSecondsForFileName(seconds);
-  const publicDir = path.join(process.cwd(), "public");
-  mkdirSync(publicDir, { recursive: true });
-  const outputPath = path.join(
-    publicDir,
+
+  const outDir = path.join(process.cwd(), "out");
+  mkdirSync(outDir, { recursive: true });
+
+  const sourceSubtitlePath = path.join(outDir, `${inputBaseName}.json`);
+  const selectedSubtitlePath = path.join(
+    process.cwd(),
+    "public",
+    `${inputBaseName}_${secondsLabel}s.json`,
+  );
+  const selectionMetadataPath = path.join(
+    outDir,
+    `${inputBaseName}_${secondsLabel}s.selection.json`,
+  );
+  const shortVideoPath = path.join(
+    outDir,
+    `${inputBaseName}_${secondsLabel}s.mp4`,
+  );
+  const shortSubtitlePath = path.join(
+    outDir,
     `${inputBaseName}_${secondsLabel}s.json`,
   );
 
-  writeFileSync(outputPath, JSON.stringify(selectedCaptions, null, 2));
+  const tempDir = path.join(
+    outDir,
+    `temp-short-${inputBaseName}-${Date.now().toString(36)}`,
+  );
+  mkdirSync(tempDir, { recursive: true });
 
-  console.log(`Input subtitle JSON: ${subtitlePath}`);
-  console.log(`LLM chunks analyzed: ${chunks.length}`);
-  console.log(`Model: ${model}`);
-  console.log(`Max iterations: ${maxIterations}`);
-  console.log(`Target short duration: ${seconds}s`);
-  console.log(
-    `Selected segments: ${formatSelectionSegments(bestSelection.segments)}`,
-  );
-  console.log(
-    `Selected timeline span: ${bestSelection.startMs}ms - ${bestSelection.endMs}ms`,
-  );
-  console.log(
-    `Combined selected duration: ${bestSelection.totalDurationSec.toFixed(2)}s`,
-  );
-  console.log(`Selected hook: ${bestSelection.hook}`);
-  console.log(`Selection reason: ${bestSelection.reason}`);
-  console.log(`Selection score: ${bestSelection.normalizedScore.toFixed(2)}`);
-  console.log(`Output captions: ${selectedCaptions.length}`);
-  console.log(`Saved short subtitle JSON: ${outputPath}`);
+  try {
+    run("bun", ["run", "create-subtitles", inputVideoPath, sourceSubtitlePath]);
+
+    const createShortArgs = [
+      "run",
+      "create-short",
+      sourceSubtitlePath,
+      "--seconds",
+      `${seconds}`,
+      "--max-iterations",
+      `${maxIterations}`,
+    ];
+
+    if (modelArg) {
+      createShortArgs.push("--model", modelArg);
+    }
+
+    run("bun", createShortArgs);
+
+    if (!existsSync(selectedSubtitlePath)) {
+      throw new Error(
+        `Selected subtitle JSON was not created: ${selectedSubtitlePath}`,
+      );
+    }
+
+    if (!existsSync(selectionMetadataPath)) {
+      throw new Error(
+        `Short selection metadata was not created: ${selectionMetadataPath}`,
+      );
+    }
+
+    const selectedCaptions = validateSubtitleJson(selectedSubtitlePath);
+    const selectedSegments = validateSelectionMetadata(selectionMetadataPath);
+
+    const segmentFiles = createSegmentClips(
+      inputVideoPath,
+      selectedSegments,
+      tempDir,
+    );
+    const joinedSegmentsPath = path.join(
+      tempDir,
+      `${inputBaseName}_${secondsLabel}s.mp4`,
+    );
+    joinSegmentClips(segmentFiles, joinedSegmentsPath);
+
+    run("bunx", [
+      "remotion",
+      "ffmpeg",
+      "-y",
+      "-i",
+      joinedSegmentsPath,
+      "-c",
+      "copy",
+      shortVideoPath,
+    ]);
+
+    const remappedCaptions = buildRemappedCaptions(
+      selectedCaptions,
+      selectedSegments,
+    );
+    writeFileSync(shortSubtitlePath, JSON.stringify(remappedCaptions, null, 2));
+
+    run("bun", [
+      "run",
+      "add-subtitle-to-video",
+      shortVideoPath,
+      "--subtitle",
+      shortSubtitlePath,
+    ]);
+
+    console.log(`Input video: ${inputVideoPath}`);
+    console.log(`Source subtitles: ${sourceSubtitlePath}`);
+    console.log(`Selected subtitles: ${selectedSubtitlePath}`);
+    console.log(`Selection metadata: ${selectionMetadataPath}`);
+    console.log(`Created short video: ${shortVideoPath}`);
+    console.log(`Created short subtitles: ${shortSubtitlePath}`);
+    console.log(
+      `Created captioned short video: ${path.join(outDir, `${inputBaseName}_${secondsLabel}s-captioned.mp4`)}`,
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 };
 
-void main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
+void main().catch((err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err);
   console.error(message);
   console.error(usage());
   process.exit(1);
