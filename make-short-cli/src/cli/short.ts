@@ -31,11 +31,23 @@ const DEFAULT_MAX_ITERATIONS = 3;
 const MAX_ITERATIONS = 10;
 
 const usage = () => {
-  return "Usage: bun src/cli/short.ts <path-to-video> [--seconds <number>] [--model <name>] [--max-iterations <1-10>]";
+  return "Usage: bun src/cli/short.ts <path-to-video> [--seconds <number>] [--model <name>] [--max-iterations <1-10>] [--subtitle-color <hex>]";
 };
 
 const isFiniteNumber = (value: unknown): value is number => {
   return typeof value === "number" && Number.isFinite(value);
+};
+
+const normalizeSubtitleColor = (value: string) => {
+  const trimmed = value.trim();
+  const withoutHash = trimmed.startsWith("#") ? trimmed.slice(1) : trimmed;
+  if (!/^[0-9a-fA-F]{6}$/.test(withoutHash)) {
+    throw new Error(
+      "--subtitle-color must be a 6-digit hexadecimal value like #39E508.",
+    );
+  }
+
+  return `#${withoutHash.toUpperCase()}`;
 };
 
 const run = (command: string, args: string[]) => {
@@ -54,6 +66,7 @@ const parseArgs = (args: string[]) => {
   let seconds = DEFAULT_SECONDS;
   let modelArg: string | null = null;
   let maxIterations = DEFAULT_MAX_ITERATIONS;
+  let subtitleColorArg: string | null = null;
 
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
@@ -141,6 +154,39 @@ const parseArgs = (args: string[]) => {
       continue;
     }
 
+    if (arg === "--subtitle-color") {
+      if (subtitleColorArg) {
+        throw new Error(
+          "The --subtitle-color option can only be provided once.",
+        );
+      }
+
+      const value = args[index + 1];
+      if (!value || value.startsWith("--")) {
+        throw new Error("Missing value for --subtitle-color.");
+      }
+
+      subtitleColorArg = normalizeSubtitleColor(value);
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--subtitle-color=")) {
+      if (subtitleColorArg) {
+        throw new Error(
+          "The --subtitle-color option can only be provided once.",
+        );
+      }
+
+      const value = arg.slice("--subtitle-color=".length);
+      if (!value) {
+        throw new Error("Missing value for --subtitle-color.");
+      }
+
+      subtitleColorArg = normalizeSubtitleColor(value);
+      continue;
+    }
+
     if (arg.startsWith("--")) {
       throw new Error(`Unknown option: ${arg}`);
     }
@@ -161,6 +207,7 @@ const parseArgs = (args: string[]) => {
     seconds,
     modelArg,
     maxIterations,
+    subtitleColorArg,
   };
 };
 
@@ -441,9 +488,8 @@ const joinSegmentClips = (segmentFiles: string[], outputVideoPath: string) => {
 };
 
 const main = async () => {
-  const { videoArg, seconds, modelArg, maxIterations } = parseArgs(
-    process.argv.slice(2),
-  );
+  const { videoArg, seconds, modelArg, maxIterations, subtitleColorArg } =
+    parseArgs(process.argv.slice(2));
 
   const inputVideoPath = resolveInputVideo(videoArg);
   const inputBaseName = path.basename(
@@ -539,13 +585,18 @@ const main = async () => {
     run("bun", ["run", "create-subtitles", shortVideoPath, shortSubtitlePath]);
     validateSubtitleJson(shortSubtitlePath);
 
-    run("bun", [
+    const addSubtitleArgs = [
       "run",
       "add-subtitle-to-video",
       shortVideoPath,
       "--subtitle",
       shortSubtitlePath,
-    ]);
+    ];
+    if (subtitleColorArg) {
+      addSubtitleArgs.push("--subtitle-color", subtitleColorArg);
+    }
+
+    run("bun", addSubtitleArgs);
 
     console.log(`Input video: ${inputVideoPath}`);
     console.log(`Source subtitles: ${sourceSubtitlePath}`);

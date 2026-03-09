@@ -65,6 +65,12 @@ If you already have a subtitles JSON file, provide it and skip subtitle generati
 bun run add-subtitle-to-video ./examples/winner01.mp4 --subtitle ./out/winner01.json
 ```
 
+To override the active subtitle highlight color:
+
+```console
+bun run add-subtitle-to-video ./examples/winner01.mp4 --subtitle-color "#FFAA00"
+```
+
 The provided JSON is validated before rendering.
 
 Pick the most viral subtitle segment using an LLM and write a short-only JSON into `public/`:
@@ -83,6 +89,7 @@ Optional flags:
 
 - `--model <name>`: Override model per run (for example `--model gpt-5-mini`)
 - `--max-iterations <1-10>`: Limit optimization loop attempts (default: `3`)
+- `--subtitle-color <hex>`: Set active subtitle highlight color (`#RRGGBB` or `RRGGBB`, default: current green)
 
 The selector can choose one or multiple chronological subtitle segments as long as the combined duration fits `--seconds` and the final short remains understandable.
 

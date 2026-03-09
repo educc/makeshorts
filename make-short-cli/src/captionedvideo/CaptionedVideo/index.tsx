@@ -24,6 +24,10 @@ export type SubtitleProp = {
 
 export const captionedVideoSchema = z.object({
   src: z.string(),
+  subtitleColor: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/)
+    .optional(),
 });
 
 export const calculateCaptionedVideoMetadata: CalculateMetadataFunction<
@@ -53,7 +57,8 @@ const SWITCH_CAPTIONS_EVERY_MS = 1200;
 
 export const CaptionedVideo: React.FC<{
   src: string;
-}> = ({ src }) => {
+  subtitleColor?: string;
+}> = ({ src, subtitleColor }) => {
   const [subtitles, setSubtitles] = useState<Caption[]>([]);
   const [subtitleFound, setSubtitleFound] = useState(true);
   const { delayRender, continueRender } = useDelayRender();
@@ -153,7 +158,7 @@ export const CaptionedVideo: React.FC<{
             from={subtitleStartFrame}
             durationInFrames={durationInFrames}
           >
-            <SubtitlePage key={index} page={page} />;
+            <SubtitlePage page={page} subtitleColor={subtitleColor} />
           </Sequence>
         );
       })}

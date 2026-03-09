@@ -19,6 +19,10 @@ type SubtitleCaption = {
   confidence: number;
 };
 
+const usage = () => {
+  return "Usage: bun src/cli/add-subtitle-to-video.ts <path-to-video> [--subtitle <path-to-subtitle-json>] [--subtitle-color <hex>]";
+};
+
 const run = (command: string, args: string[]) => {
   const result = spawnSync(command, args, {
     cwd: process.cwd(),
@@ -87,6 +91,18 @@ const isFiniteNumber = (value: unknown): value is number => {
   return typeof value === "number" && Number.isFinite(value);
 };
 
+const normalizeSubtitleColor = (value: string) => {
+  const trimmed = value.trim();
+  const withoutHash = trimmed.startsWith("#") ? trimmed.slice(1) : trimmed;
+  if (!/^[0-9a-fA-F]{6}$/.test(withoutHash)) {
+    throw new Error(
+      "--subtitle-color must be a 6-digit hexadecimal value like #39E508.",
+    );
+  }
+
+  return `#${withoutHash.toUpperCase()}`;
+};
+
 const validateSubtitleJson = (subtitleJsonPath: string): SubtitleCaption[] => {
   let parsed: unknown;
   try {
@@ -153,6 +169,7 @@ const validateSubtitleJson = (subtitleJsonPath: string): SubtitleCaption[] => {
 const parseArgs = (args: string[]) => {
   let videoArg: string | null = null;
   let subtitleArg: string | null = null;
+  let subtitleColorArg: string | null = null;
 
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
@@ -186,6 +203,39 @@ const parseArgs = (args: string[]) => {
       continue;
     }
 
+    if (arg === "--subtitle-color") {
+      if (subtitleColorArg) {
+        throw new Error(
+          "The --subtitle-color option can only be provided once.",
+        );
+      }
+
+      const value = args[index + 1];
+      if (!value || value.startsWith("--")) {
+        throw new Error("Missing value for --subtitle-color.");
+      }
+
+      subtitleColorArg = normalizeSubtitleColor(value);
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--subtitle-color=")) {
+      if (subtitleColorArg) {
+        throw new Error(
+          "The --subtitle-color option can only be provided once.",
+        );
+      }
+
+      const value = arg.slice("--subtitle-color=".length);
+      if (!value) {
+        throw new Error("Missing value for --subtitle-color.");
+      }
+
+      subtitleColorArg = normalizeSubtitleColor(value);
+      continue;
+    }
+
     if (arg.startsWith("--")) {
       throw new Error(`Unknown option: ${arg}`);
     }
@@ -198,19 +248,20 @@ const parseArgs = (args: string[]) => {
   }
 
   if (!videoArg) {
-    throw new Error(
-      "Usage: bun src/cli/add-subtitle-to-video.ts <path-to-video> [--subtitle <path-to-subtitle-json>]",
-    );
+    throw new Error(usage());
   }
 
   return {
     videoArg,
     subtitleArg,
+    subtitleColorArg,
   };
 };
 
 const main = async () => {
-  const { videoArg, subtitleArg } = parseArgs(process.argv.slice(2));
+  const { videoArg, subtitleArg, subtitleColorArg } = parseArgs(
+    process.argv.slice(2),
+  );
 
   const inputVideoPath = resolveInputVideo(videoArg);
   const providedSubtitlePath = subtitleArg
@@ -270,6 +321,13 @@ const main = async () => {
   );
   cpSync(subtitleJsonPath, subtitleJsonPublicPath);
 
+  const renderProps: { src: string; subtitleColor?: string } = {
+    src: `/public/${fileName}`,
+  };
+  if (subtitleColorArg) {
+    renderProps.subtitleColor = subtitleColorArg;
+  }
+
   const outputVideoPath = path.join(
     outDir,
     `${fileNameWithoutExt}-captioned.mp4`,
@@ -279,7 +337,7 @@ const main = async () => {
     "render",
     "CaptionedVideo",
     outputVideoPath,
-    `--props=${JSON.stringify({ src: `/public/${fileName}` })}`,
+    `--props=${JSON.stringify(renderProps)}`,
   ]);
 
   console.log(`Cleaned public directory: ${publicDir}`);
@@ -291,6 +349,9 @@ const main = async () => {
   } else {
     console.log(`Created subtitle JSON: ${subtitleJsonPath}`);
   }
+  if (subtitleColorArg) {
+    console.log(`Subtitle highlight color: ${subtitleColorArg}`);
+  }
   console.log(`Validated subtitle JSON captions: ${subtitlesCount}`);
   console.log(`Copied subtitle JSON: ${subtitleJsonPublicPath}`);
   console.log(`Created captioned video: ${outputVideoPath}`);
@@ -299,5 +360,6 @@ const main = async () => {
 void main().catch((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err);
   console.error(message);
+  console.error(usage());
   process.exit(1);
 });
