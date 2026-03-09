@@ -78,6 +78,8 @@ Optional flags:
 - `--model <name>`: Override model per run (for example `--model gpt-5-mini`)
 - `--max-iterations <1-10>`: Limit optimization loop attempts (default: `10`)
 
+The selector can choose one or multiple chronological subtitle segments as long as the combined duration fits `--seconds` and the final short remains understandable.
+
 Environment variables for the short selector:
 
 - `OPENAI_BASE_URL` (default: `http://localhost:3009`)

@@ -22,19 +22,30 @@ type TranscriptChunk = {
   text: string;
 };
 
-type ShortSelection = {
+type ShortSegment = {
   startChunkId: number;
   endChunkId: number;
+};
+
+type ShortSelection = {
+  segments: ShortSegment[];
   viralityScore: number;
   hook: string;
   reason: string;
+};
+
+type EvaluatedSegment = ShortSegment & {
+  startMs: number;
+  endMs: number;
+  durationSec: number;
 };
 
 type EvaluatedSelection = ShortSelection & {
   iteration: number;
   startMs: number;
   endMs: number;
-  durationSec: number;
+  totalDurationSec: number;
+  segmentsWithTime: EvaluatedSegment[];
   normalizedScore: number;
 };
 
@@ -45,27 +56,32 @@ const DEFAULT_OPENAI_MODEL = "gpt-5-mini";
 
 const SYSTEM_PROMPT = `You are an elite short-form video editor and viral content strategist.
 
-Your job is to pick ONE contiguous subtitle range that will become a short video for TikTok, YouTube Shorts, and Instagram Reels.
+Your job is to select subtitle chunks that will become a short video for TikTok, YouTube Shorts, and Instagram Reels.
 
 Primary objective:
-- Maximize retention and shareability.
+- Maximize retention and shareability while keeping the story understandable.
 
 Hard constraints:
-- Return a range between startChunkId and endChunkId (inclusive).
-- The selected duration must be <= targetSeconds.
-- The range must be contiguous.
+- You may select one or multiple segments.
+- Each segment must use startChunkId and endChunkId (inclusive).
+- Segments can come from any part of the video.
+- Segments must be in chronological order and must not overlap.
+- The total combined duration across all selected segments must be <= targetSeconds.
+
+Understanding constraints:
+- The final selected segments must make sense together as a coherent short.
+- Viewers must understand what is happening without needing extra context.
+- Prefer natural language flow and avoid confusing jumps.
 
 Selection principles:
 - Prefer moments with a strong hook in the first 1-2 seconds.
 - Prefer emotional spikes, surprise, tension, payoff, social proof, or clear transformation.
-- Prefer standalone clarity when watched out of context.
 - Avoid long low-energy build-up.
-- Prefer natural language cadence and coherent sentence boundaries.
 - If multiple candidates are close, favor the one that is easier to understand instantly and likely to spark comments/shares.
 
 Optimization behavior:
 - You may receive previous attempts and a current best score.
-- Propose a better range when possible.
+- Propose a better set of segments when possible.
 - Be strict and realistic with viralityScore (0-100).
 
 Output rules:
@@ -394,16 +410,22 @@ const buildJsonSchemaResponseFormat = () => {
       schema: {
         type: "object",
         additionalProperties: false,
-        required: [
-          "startChunkId",
-          "endChunkId",
-          "viralityScore",
-          "hook",
-          "reason",
-        ],
+        required: ["segments", "viralityScore", "hook", "reason"],
         properties: {
-          startChunkId: { type: "integer" },
-          endChunkId: { type: "integer" },
+          segments: {
+            type: "array",
+            minItems: 1,
+            maxItems: 4,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["startChunkId", "endChunkId"],
+              properties: {
+                startChunkId: { type: "integer" },
+                endChunkId: { type: "integer" },
+              },
+            },
+          },
           viralityScore: { type: "number", minimum: 0, maximum: 100 },
           hook: { type: "string", minLength: 1 },
           reason: { type: "string", minLength: 1 },
@@ -522,18 +544,51 @@ const parseSelection = (rawContent: string): ShortSelection => {
   }
 
   const record = parsed as Record<string, unknown>;
+  const segmentsRaw = record.segments;
   const startChunkId = record.startChunkId;
   const endChunkId = record.endChunkId;
   const viralityScore = record.viralityScore;
   const hook = record.hook;
   const reason = record.reason;
 
-  if (!Number.isInteger(startChunkId)) {
-    throw new Error("startChunkId must be an integer.");
+  const rawSegments: unknown[] = Array.isArray(segmentsRaw)
+    ? segmentsRaw
+    : Number.isInteger(startChunkId) && Number.isInteger(endChunkId)
+      ? [{ startChunkId, endChunkId }]
+      : [];
+
+  if (rawSegments.length === 0) {
+    throw new Error(
+      "segments must be a non-empty array (or include legacy startChunkId/endChunkId).",
+    );
   }
-  if (!Number.isInteger(endChunkId)) {
-    throw new Error("endChunkId must be an integer.");
-  }
+
+  const segments = rawSegments.map((segment, index) => {
+    if (
+      typeof segment !== "object" ||
+      segment === null ||
+      Array.isArray(segment)
+    ) {
+      throw new Error(`segments[${index}] must be an object.`);
+    }
+
+    const segmentRecord = segment as Record<string, unknown>;
+    const segmentStart = segmentRecord.startChunkId;
+    const segmentEnd = segmentRecord.endChunkId;
+
+    if (!Number.isInteger(segmentStart)) {
+      throw new Error(`segments[${index}].startChunkId must be an integer.`);
+    }
+    if (!Number.isInteger(segmentEnd)) {
+      throw new Error(`segments[${index}].endChunkId must be an integer.`);
+    }
+
+    return {
+      startChunkId: Number(segmentStart),
+      endChunkId: Number(segmentEnd),
+    };
+  });
+
   if (!isFiniteNumber(viralityScore)) {
     throw new Error("viralityScore must be a finite number.");
   }
@@ -543,13 +598,8 @@ const parseSelection = (rawContent: string): ShortSelection => {
   if (typeof reason !== "string" || reason.trim().length === 0) {
     throw new Error("reason must be a non-empty string.");
   }
-
-  const safeStartChunkId = Number(startChunkId);
-  const safeEndChunkId = Number(endChunkId);
-
   return {
-    startChunkId: safeStartChunkId,
-    endChunkId: safeEndChunkId,
+    segments,
     viralityScore,
     hook: hook.trim(),
     reason: reason.trim(),
@@ -562,32 +612,64 @@ const evaluateSelection = (
   targetSeconds: number,
   iteration: number,
 ): EvaluatedSelection => {
-  if (selection.startChunkId < 0 || selection.startChunkId >= chunks.length) {
+  if (selection.segments.length === 0) {
+    throw new Error("At least one segment is required.");
+  }
+
+  if (selection.segments.length > 4) {
+    throw new Error("A maximum of 4 segments is allowed.");
+  }
+
+  const segmentsWithTime: EvaluatedSegment[] = [];
+  let previousEndChunkId = -1;
+  let totalDurationMs = 0;
+
+  for (let index = 0; index < selection.segments.length; index++) {
+    const segment = selection.segments[index];
+    if (segment.startChunkId < 0 || segment.startChunkId >= chunks.length) {
+      throw new Error(
+        `segments[${index}].startChunkId ${segment.startChunkId} is out of bounds for ${chunks.length} chunks.`,
+      );
+    }
+
+    if (segment.endChunkId < 0 || segment.endChunkId >= chunks.length) {
+      throw new Error(
+        `segments[${index}].endChunkId ${segment.endChunkId} is out of bounds for ${chunks.length} chunks.`,
+      );
+    }
+
+    if (segment.endChunkId < segment.startChunkId) {
+      throw new Error(`segments[${index}] has endChunkId < startChunkId.`);
+    }
+
+    if (segment.startChunkId <= previousEndChunkId) {
+      throw new Error(
+        "Segments must be in chronological order and must not overlap.",
+      );
+    }
+
+    const startMs = chunks[segment.startChunkId].startMs;
+    const endMs = chunks[segment.endChunkId].endMs;
+    if (endMs <= startMs) {
+      throw new Error(`segments[${index}] has invalid timestamps.`);
+    }
+
+    const durationMs = endMs - startMs;
+    totalDurationMs += durationMs;
+    previousEndChunkId = segment.endChunkId;
+
+    segmentsWithTime.push({
+      ...segment,
+      startMs,
+      endMs,
+      durationSec: durationMs / 1000,
+    });
+  }
+
+  const totalDurationSec = totalDurationMs / 1000;
+  if (totalDurationSec > targetSeconds) {
     throw new Error(
-      `startChunkId ${selection.startChunkId} is out of bounds for ${chunks.length} chunks.`,
-    );
-  }
-
-  if (selection.endChunkId < 0 || selection.endChunkId >= chunks.length) {
-    throw new Error(
-      `endChunkId ${selection.endChunkId} is out of bounds for ${chunks.length} chunks.`,
-    );
-  }
-
-  if (selection.endChunkId < selection.startChunkId) {
-    throw new Error("endChunkId must be >= startChunkId.");
-  }
-
-  const startMs = chunks[selection.startChunkId].startMs;
-  const endMs = chunks[selection.endChunkId].endMs;
-  if (endMs <= startMs) {
-    throw new Error("Selected range has invalid timestamps.");
-  }
-
-  const durationSec = (endMs - startMs) / 1000;
-  if (durationSec > targetSeconds) {
-    throw new Error(
-      `Selected duration ${durationSec.toFixed(2)}s exceeds target ${targetSeconds}s.`,
+      `Selected combined duration ${totalDurationSec.toFixed(2)}s exceeds target ${targetSeconds}s.`,
     );
   }
 
@@ -595,17 +677,29 @@ const evaluateSelection = (
     0,
     Math.min(100, selection.viralityScore),
   );
-  const utilizationBonus = Math.min(10, (durationSec / targetSeconds) * 10);
+  const utilizationBonus = Math.min(
+    10,
+    (totalDurationSec / targetSeconds) * 10,
+  );
   const normalizedScore = boundedViralityScore + utilizationBonus;
+  const firstSegment = segmentsWithTime[0];
+  const lastSegment = segmentsWithTime[segmentsWithTime.length - 1];
 
   return {
     ...selection,
     iteration,
-    startMs,
-    endMs,
-    durationSec,
+    startMs: firstSegment.startMs,
+    endMs: lastSegment.endMs,
+    totalDurationSec,
+    segmentsWithTime,
     normalizedScore,
   };
+};
+
+const formatSelectionSegments = (segments: ShortSegment[]) => {
+  return segments
+    .map((segment) => `${segment.startChunkId}-${segment.endChunkId}`)
+    .join(", ");
 };
 
 const buildUserPrompt = (
@@ -615,7 +709,7 @@ const buildUserPrompt = (
   feedback: string,
 ) => {
   const bestSnapshot = best
-    ? `Current best: chunks ${best.startChunkId}-${best.endChunkId}, duration ${best.durationSec.toFixed(2)}s, normalizedScore ${best.normalizedScore.toFixed(2)}, viralityScore ${best.viralityScore.toFixed(2)}, hook "${best.hook}"`
+    ? `Current best: segments [${formatSelectionSegments(best.segments)}], combinedDuration ${best.totalDurationSec.toFixed(2)}s, normalizedScore ${best.normalizedScore.toFixed(2)}, viralityScore ${best.viralityScore.toFixed(2)}, hook "${best.hook}"`
     : "Current best: none yet.";
 
   return [
@@ -803,7 +897,7 @@ const main = async () => {
       ) {
         bestSelection = evaluated;
         roundsWithoutImprovement = 0;
-        feedback = `Accepted. Improve this benchmark: normalizedScore=${evaluated.normalizedScore.toFixed(2)}, duration=${evaluated.durationSec.toFixed(2)}s, hook=${evaluated.hook}`;
+        feedback = `Accepted. Improve this benchmark: normalizedScore=${evaluated.normalizedScore.toFixed(2)}, segments=[${formatSelectionSegments(evaluated.segments)}], combinedDuration=${evaluated.totalDurationSec.toFixed(2)}s, hook=${evaluated.hook}`;
       } else {
         roundsWithoutImprovement += 1;
         feedback = `Rejected. Candidate score ${evaluated.normalizedScore.toFixed(2)} was not better than best ${bestSelection.normalizedScore.toFixed(2)}.`;
@@ -826,10 +920,9 @@ const main = async () => {
   }
 
   const selectedCaptions = captions.filter((caption) => {
-    return (
-      caption.endMs > bestSelection.startMs &&
-      caption.startMs < bestSelection.endMs
-    );
+    return bestSelection.segmentsWithTime.some((segment) => {
+      return caption.endMs > segment.startMs && caption.startMs < segment.endMs;
+    });
   });
 
   if (selectedCaptions.length === 0) {
@@ -853,7 +946,13 @@ const main = async () => {
   console.log(`Max iterations: ${maxIterations}`);
   console.log(`Target short duration: ${seconds}s`);
   console.log(
-    `Selected range: ${bestSelection.startMs}ms - ${bestSelection.endMs}ms (${bestSelection.durationSec.toFixed(2)}s)`,
+    `Selected segments: ${formatSelectionSegments(bestSelection.segments)}`,
+  );
+  console.log(
+    `Selected timeline span: ${bestSelection.startMs}ms - ${bestSelection.endMs}ms`,
+  );
+  console.log(
+    `Combined selected duration: ${bestSelection.totalDurationSec.toFixed(2)}s`,
   );
   console.log(`Selected hook: ${bestSelection.hook}`);
   console.log(`Selection reason: ${bestSelection.reason}`);
