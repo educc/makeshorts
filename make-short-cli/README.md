@@ -76,7 +76,7 @@ bun run create-short ./out/winner02.json --seconds 20
 Optional flags:
 
 - `--model <name>`: Override model per run (for example `--model gpt-5-mini`)
-- `--max-iterations <1-10>`: Limit optimization loop attempts (default: `10`)
+- `--max-iterations <1-10>`: Limit optimization loop attempts (default: `3`)
 
 The selector can choose one or multiple chronological subtitle segments as long as the combined duration fits `--seconds` and the final short remains understandable.
 

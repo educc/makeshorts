@@ -50,6 +50,7 @@ type EvaluatedSelection = ShortSelection & {
 };
 
 const DEFAULT_SECONDS = 20;
+const DEFAULT_MAX_ITERATIONS = 3;
 const MAX_ITERATIONS = 10;
 const DEFAULT_OPENAI_BASE_URL = "http://localhost:3009";
 const DEFAULT_OPENAI_MODEL = "gpt-5-mini";
@@ -101,7 +102,7 @@ const parseArgs = (args: string[]) => {
   let filenameArg: string | null = null;
   let seconds = DEFAULT_SECONDS;
   let modelArg: string | null = null;
-  let maxIterations = MAX_ITERATIONS;
+  let maxIterations = DEFAULT_MAX_ITERATIONS;
 
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
