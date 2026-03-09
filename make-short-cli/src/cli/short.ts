@@ -440,64 +440,6 @@ const joinSegmentClips = (segmentFiles: string[], outputVideoPath: string) => {
   ]);
 };
 
-const buildRemappedCaptions = (
-  selectedCaptions: SubtitleCaption[],
-  segments: SelectionSegment[],
-): SubtitleCaption[] => {
-  const sortedCaptions = [...selectedCaptions].sort(
-    (a, b) => a.startMs - b.startMs,
-  );
-  const remapped: SubtitleCaption[] = [];
-  let timelineOffsetMs = 0;
-
-  for (const segment of segments) {
-    for (const caption of sortedCaptions) {
-      if (caption.endMs <= segment.startMs) {
-        continue;
-      }
-
-      if (caption.startMs >= segment.endMs) {
-        continue;
-      }
-
-      const overlapStart = Math.max(caption.startMs, segment.startMs);
-      const overlapEnd = Math.min(caption.endMs, segment.endMs);
-
-      if (overlapEnd <= overlapStart) {
-        continue;
-      }
-
-      const remappedStartMs =
-        timelineOffsetMs + (overlapStart - segment.startMs);
-      const remappedEndMs = timelineOffsetMs + (overlapEnd - segment.startMs);
-
-      const remappedTimestampMs =
-        caption.timestampMs === null
-          ? null
-          : timelineOffsetMs +
-            (Math.min(Math.max(caption.timestampMs, overlapStart), overlapEnd) -
-              segment.startMs);
-
-      remapped.push({
-        text: caption.text,
-        startMs: remappedStartMs,
-        endMs: remappedEndMs,
-        timestampMs: remappedTimestampMs,
-        confidence: caption.confidence,
-      });
-    }
-
-    timelineOffsetMs += segment.endMs - segment.startMs;
-  }
-
-  if (remapped.length === 0) {
-    throw new Error("Could not build remapped captions for the short video.");
-  }
-
-  remapped.sort((a, b) => a.startMs - b.startMs);
-  return remapped;
-};
-
 const main = async () => {
   const { videoArg, seconds, modelArg, maxIterations } = parseArgs(
     process.argv.slice(2),
@@ -569,7 +511,7 @@ const main = async () => {
       );
     }
 
-    const selectedCaptions = validateSubtitleJson(selectedSubtitlePath);
+    validateSubtitleJson(selectedSubtitlePath);
     const selectedSegments = validateSelectionMetadata(selectionMetadataPath);
 
     const segmentFiles = createSegmentClips(
@@ -594,11 +536,8 @@ const main = async () => {
       shortVideoPath,
     ]);
 
-    const remappedCaptions = buildRemappedCaptions(
-      selectedCaptions,
-      selectedSegments,
-    );
-    writeFileSync(shortSubtitlePath, JSON.stringify(remappedCaptions, null, 2));
+    run("bun", ["run", "create-subtitles", shortVideoPath, shortSubtitlePath]);
+    validateSubtitleJson(shortSubtitlePath);
 
     run("bun", [
       "run",
