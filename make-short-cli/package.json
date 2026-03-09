@@ -8,7 +8,8 @@
     "render": "bunx remotion render src/captionedvideo/index.ts",
     "upgrade": "bunx remotion upgrade",
     "lint": "eslint src && tsc",
-    "create-subtitles": "bun src/cli/video2sub.ts"
+    "create-subtitles": "bun src/cli/video2sub.ts",
+    "add-subtitle-to-video": "bun src/cli/add-subtitle-to-video.ts"
   },
   "repository": {},
   "license": "UNLICENSED",

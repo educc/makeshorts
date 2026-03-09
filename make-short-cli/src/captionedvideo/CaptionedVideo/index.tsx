@@ -5,7 +5,7 @@ import {
   AbsoluteFill,
   CalculateMetadataFunction,
   cancelRender,
-  getStaticFiles,
+  getRemotionEnvironment,
   OffthreadVideo,
   Sequence,
   useDelayRender,
@@ -30,20 +30,19 @@ export const calculateCaptionedVideoMetadata: CalculateMetadataFunction<
   z.infer<typeof captionedVideoSchema>
 > = async ({ props }) => {
   const fps = 30;
-  const metadata = await getVideoMetadata(props.src);
+  try {
+    const metadata = await getVideoMetadata(props.src);
 
-  return {
-    fps,
-    durationInFrames: Math.floor(metadata.durationInSeconds * fps),
-  };
-};
-
-const getFileExists = (file: string) => {
-  const files = getStaticFiles();
-  const fileExists = files.find((f) => {
-    return f.src === file;
-  });
-  return Boolean(fileExists);
+    return {
+      fps,
+      durationInFrames: Math.floor(metadata.durationInSeconds * fps),
+    };
+  } catch {
+    return {
+      fps,
+      durationInFrames: fps,
+    };
+  }
 };
 
 // How many captions should be displayed at a time?
@@ -56,6 +55,7 @@ export const CaptionedVideo: React.FC<{
   src: string;
 }> = ({ src }) => {
   const [subtitles, setSubtitles] = useState<Caption[]>([]);
+  const [subtitleFound, setSubtitleFound] = useState(true);
   const { delayRender, continueRender } = useDelayRender();
   const [handle] = useState(() => delayRender());
   const { fps } = useVideoConfig();
@@ -70,25 +70,50 @@ export const CaptionedVideo: React.FC<{
     try {
       await loadFont();
       const res = await fetch(subtitlesFile);
-      const data = (await res.json()) as Caption[];
-      setSubtitles(data);
+      if (!res.ok) {
+        setSubtitles([]);
+        setSubtitleFound(false);
+        return;
+      }
+
+      const data = (await res.json()) as unknown;
+      if (!Array.isArray(data)) {
+        setSubtitles([]);
+        setSubtitleFound(false);
+        return;
+      }
+
+      setSubtitles(data as Caption[]);
+      setSubtitleFound(true);
+    } catch {
+      setSubtitles([]);
+      setSubtitleFound(false);
+    } finally {
       continueRender(handle);
-    } catch (e) {
-      cancelRender(e);
     }
   }, [continueRender, handle, subtitlesFile]);
 
   useEffect(() => {
-    fetchSubtitles();
+    const { isStudio } = getRemotionEnvironment();
 
-    const c = watchStaticFile(subtitlesFile, () => {
-      fetchSubtitles();
+    fetchSubtitles().catch((err) => {
+      cancelRender(err);
+    });
+
+    if (!isStudio) {
+      return;
+    }
+
+    const watcher = watchStaticFile(subtitlesFile, () => {
+      fetchSubtitles().catch((err) => {
+        cancelRender(err);
+      });
     });
 
     return () => {
-      c.cancel();
+      watcher.cancel();
     };
-  }, [fetchSubtitles, src, subtitlesFile]);
+  }, [fetchSubtitles, subtitlesFile]);
 
   const { pages } = useMemo(() => {
     return createTikTokStyleCaptions({
@@ -129,7 +154,7 @@ export const CaptionedVideo: React.FC<{
           </Sequence>
         );
       })}
-      {getFileExists(subtitlesFile) ? null : <NoCaptionFile />}
+      {subtitleFound ? null : <NoCaptionFile />}
     </AbsoluteFill>
   );
 };

@@ -25,9 +25,9 @@ const WHISPER_PATH = path.join(process.cwd(), "whisper.cpp");
 const WHISPER_VERSION = "1.8.3";
 
 // Keep parity with the previous whisper-config.mjs defaults.
-const WHISPER_MODEL =
-  ((process.env.WHISPER_MODEL as WhisperModel | undefined) ??
-    "medium.es") as WhisperModel;
+const WHISPER_MODEL = ((process.env.WHISPER_MODEL as
+  | WhisperModel
+  | undefined) ?? "medium.es") as WhisperModel;
 const WHISPER_LANG = ((process.env.WHISPER_LANG as Language | undefined) ??
   "es") as Language;
 
@@ -59,7 +59,9 @@ const ensureInputFile = (arg: string): string => {
 
   const stat = lstatSync(resolvedPath);
   if (stat.isDirectory()) {
-    throw new Error(`Expected a video file, received a directory: ${resolvedPath}`);
+    throw new Error(
+      `Expected a video file, received a directory: ${resolvedPath}`,
+    );
   }
 
   const ext = path.extname(resolvedPath).toLowerCase();
@@ -74,20 +76,25 @@ const ensureInputFile = (arg: string): string => {
 
 const main = async () => {
   const videoArg = process.argv[2];
+  const outputArg = process.argv[3];
   if (!videoArg) {
-    throw new Error("Usage: bun src/cli/video2sub.ts <path-to-video>");
+    throw new Error(
+      "Usage: bun src/cli/video2sub.ts <path-to-video> [output-json-path]",
+    );
   }
 
   const videoPath = ensureInputFile(videoArg);
   const fileBaseName = path.basename(videoPath, path.extname(videoPath));
 
-  const workDir = path.join(process.cwd(), "workdir");
-  const tempDir = path.join(workDir, "temp");
+  const outDir = path.join(process.cwd(), "out");
+  const tempDir = path.join(outDir, "temp");
   const tempAudioPath = path.join(tempDir, `${fileBaseName}.wav`);
-  const outputPath = path.join(workDir, `${fileBaseName}.json`);
+  const outputPath = outputArg
+    ? path.resolve(process.cwd(), outputArg)
+    : path.join(outDir, `${fileBaseName}.json`);
 
   mkdirSync(tempDir, { recursive: true });
-  mkdirSync(workDir, { recursive: true });
+  mkdirSync(path.dirname(outputPath), { recursive: true });
 
   ensureWhisperInstallDirReady();
 
@@ -100,7 +107,9 @@ const main = async () => {
   console.log(`Extracting audio from ${videoPath}`);
   extractToTempAudioFile(videoPath, tempAudioPath);
 
-  console.log(`Transcribing video with model=${WHISPER_MODEL} language=${WHISPER_LANG}`);
+  console.log(
+    `Transcribing video with model=${WHISPER_MODEL} language=${WHISPER_LANG}`,
+  );
   const whisperCppOutput = await transcribe({
     inputPath: tempAudioPath,
     model: WHISPER_MODEL,

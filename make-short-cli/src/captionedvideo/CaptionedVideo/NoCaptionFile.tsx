@@ -14,9 +14,9 @@ export const NoCaptionFile: React.FC = () => {
         fontFamily: "sans-serif",
       }}
     >
-      No caption file found in the public folder. <br /> Run
-      {" `bun run create-subtitles <path-to-video-file>` "}to generate one in
-      {" `workdir/`."}
+      No caption file found in public. <br /> Add a JSON subtitle file in
+      {" `public/` with the same video filename (only extension changes to `"}
+      {".json`)."}
     </AbsoluteFill>
   );
 };
