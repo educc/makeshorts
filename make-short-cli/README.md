@@ -59,6 +59,14 @@ Generate subtitles and render a captioned output video in one command:
 bun run add-subtitle-to-video ./examples/winner01.mp4
 ```
 
+If you already have a subtitles JSON file, provide it and skip subtitle generation:
+
+```console
+bun run add-subtitle-to-video ./examples/winner01.mp4 --subtitle ./out/winner01.json
+```
+
+The provided JSON is validated before rendering.
+
 This command creates:
 
 - `out/<video-name>.json`

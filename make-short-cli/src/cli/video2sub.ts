@@ -27,7 +27,7 @@ const WHISPER_VERSION = "1.8.3";
 // Keep parity with the previous whisper-config.mjs defaults.
 const WHISPER_MODEL = ((process.env.WHISPER_MODEL as
   | WhisperModel
-  | undefined) ?? "medium.es") as WhisperModel;
+  | undefined) ?? "medium") as WhisperModel;
 const WHISPER_LANG = ((process.env.WHISPER_LANG as Language | undefined) ??
   "es") as Language;
 
