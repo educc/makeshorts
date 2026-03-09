@@ -123,11 +123,14 @@ export const CaptionedVideo: React.FC<{
   }, [subtitles]);
 
   return (
-    <AbsoluteFill style={{ backgroundColor: "white" }}>
+    <AbsoluteFill style={{ backgroundColor: "black" }}>
       <AbsoluteFill>
         <OffthreadVideo
           style={{
-            objectFit: "cover",
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            objectPosition: "center",
           }}
           src={src}
         />
