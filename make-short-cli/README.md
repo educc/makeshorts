@@ -67,6 +67,18 @@ bun run add-subtitle-to-video ./examples/winner01.mp4 --subtitle ./out/winner01.
 
 The provided JSON is validated before rendering.
 
+Pick the most viral subtitle segment using an LLM and write a short-only JSON into `public/`:
+
+```console
+bun run create-short ./out/winner02.json --seconds 20
+```
+
+Environment variables for the short selector:
+
+- `OPENAI_BASE_URL` (default: `http://localhost:3009`)
+- `OPENAI_SHORT_MODEL` (default: `gpt-5-mini`)
+- `OPENAI_API_KEY` (required only when calling official OpenAI API)
+
 This command creates:
 
 - `out/<video-name>.json`
