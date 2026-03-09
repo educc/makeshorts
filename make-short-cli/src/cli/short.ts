@@ -78,12 +78,14 @@ const isFiniteNumber = (value: unknown): value is number => {
 };
 
 const usage = () => {
-  return "Usage: bun src/cli/short.ts <subtitle-json-file> [--seconds <number>]";
+  return "Usage: bun src/cli/short.ts <subtitle-json-file> [--seconds <number>] [--model <name>] [--max-iterations <1-10>]";
 };
 
 const parseArgs = (args: string[]) => {
   let filenameArg: string | null = null;
   let seconds = DEFAULT_SECONDS;
+  let modelArg: string | null = null;
+  let maxIterations = MAX_ITERATIONS;
 
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
@@ -115,6 +117,62 @@ const parseArgs = (args: string[]) => {
       continue;
     }
 
+    if (arg === "--model") {
+      const value = args[index + 1];
+      if (!value || value.startsWith("--")) {
+        throw new Error("Missing value for --model.");
+      }
+
+      if (value.trim().length === 0) {
+        throw new Error("--model must be a non-empty string.");
+      }
+
+      modelArg = value.trim();
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--model=")) {
+      const value = arg.slice("--model=".length).trim();
+      if (!value) {
+        throw new Error("--model must be a non-empty string.");
+      }
+
+      modelArg = value;
+      continue;
+    }
+
+    if (arg === "--max-iterations") {
+      const value = args[index + 1];
+      if (!value || value.startsWith("--")) {
+        throw new Error("Missing value for --max-iterations.");
+      }
+
+      const parsed = Number(value);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_ITERATIONS) {
+        throw new Error(
+          `--max-iterations must be an integer between 1 and ${MAX_ITERATIONS}.`,
+        );
+      }
+
+      maxIterations = parsed;
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--max-iterations=")) {
+      const rawValue = arg.slice("--max-iterations=".length);
+      const parsed = Number(rawValue);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_ITERATIONS) {
+        throw new Error(
+          `--max-iterations must be an integer between 1 and ${MAX_ITERATIONS}.`,
+        );
+      }
+
+      maxIterations = parsed;
+      continue;
+    }
+
     if (arg.startsWith("--")) {
       throw new Error(`Unknown option: ${arg}`);
     }
@@ -133,6 +191,8 @@ const parseArgs = (args: string[]) => {
   return {
     filenameArg,
     seconds,
+    modelArg,
+    maxIterations,
   };
 };
 
@@ -672,7 +732,7 @@ const formatSecondsForFileName = (seconds: number) => {
   return `${rounded}`.replace(".", "_");
 };
 
-const ensureOpenAiEndpoint = () => {
+const ensureOpenAiEndpoint = (modelArg: string | null) => {
   const baseUrlRaw = process.env.OPENAI_BASE_URL ?? DEFAULT_OPENAI_BASE_URL;
   let parsed: URL;
   try {
@@ -682,6 +742,7 @@ const ensureOpenAiEndpoint = () => {
   }
 
   const model =
+    modelArg ??
     process.env.OPENAI_SHORT_MODEL ??
     process.env.OPENAI_MODEL ??
     DEFAULT_OPENAI_MODEL;
@@ -697,19 +758,22 @@ const ensureOpenAiEndpoint = () => {
 };
 
 const main = async () => {
-  const { filenameArg, seconds } = parseArgs(process.argv.slice(2));
+  const { filenameArg, seconds, modelArg, maxIterations } = parseArgs(
+    process.argv.slice(2),
+  );
   const subtitlePath = resolveSubtitleJson(filenameArg);
   const captions = validateSubtitleJson(subtitlePath);
   const chunks = buildTranscriptChunks(captions);
   const chunksPrompt = formatChunksForPrompt(chunks);
 
-  const { endpoint, apiKey, model, baseUrlRaw } = ensureOpenAiEndpoint();
+  const { endpoint, apiKey, model, baseUrlRaw } =
+    ensureOpenAiEndpoint(modelArg);
 
   let bestSelection: EvaluatedSelection | null = null;
   let feedback = "No previous attempts yet.";
   let roundsWithoutImprovement = 0;
 
-  for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
+  for (let iteration = 1; iteration <= maxIterations; iteration++) {
     const userPrompt = buildUserPrompt(
       chunksPrompt,
       seconds,
@@ -757,7 +821,7 @@ const main = async () => {
 
   if (!bestSelection) {
     throw new Error(
-      `Could not produce a valid short after ${MAX_ITERATIONS} iterations. Check OpenAI connectivity and model compatibility at ${baseUrlRaw}.`,
+      `Could not produce a valid short after ${maxIterations} iterations. Check OpenAI connectivity and model compatibility at ${baseUrlRaw}.`,
     );
   }
 
@@ -785,6 +849,8 @@ const main = async () => {
 
   console.log(`Input subtitle JSON: ${subtitlePath}`);
   console.log(`LLM chunks analyzed: ${chunks.length}`);
+  console.log(`Model: ${model}`);
+  console.log(`Max iterations: ${maxIterations}`);
   console.log(`Target short duration: ${seconds}s`);
   console.log(
     `Selected range: ${bestSelection.startMs}ms - ${bestSelection.endMs}ms (${bestSelection.durationSec.toFixed(2)}s)`,

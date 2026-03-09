@@ -73,6 +73,11 @@ Pick the most viral subtitle segment using an LLM and write a short-only JSON in
 bun run create-short ./out/winner02.json --seconds 20
 ```
 
+Optional flags:
+
+- `--model <name>`: Override model per run (for example `--model gpt-5-mini`)
+- `--max-iterations <1-10>`: Limit optimization loop attempts (default: `10`)
+
 Environment variables for the short selector:
 
 - `OPENAI_BASE_URL` (default: `http://localhost:3009`)
